@@ -28,12 +28,18 @@ import BookingsView from './components/BookingsView';
 import RoomsView from './components/RoomsView';
 import GuestsCRMView from './components/GuestsCRMView';
 import HousekeepingView from './components/HousekeepingView';
+import MaintenanceView from './components/MaintenanceView';
+import InventoryView from './components/InventoryView';
+import StaffManagementView from './components/StaffManagementView';
+import ReviewsManagementView from './components/ReviewsManagementView';
+import WhatsAppAutomationView from './components/WhatsAppAutomationView';
+import BillingView from './components/billing/BillingView';
 
 import { 
   initialArrivals, 
   initialDepartures, 
   initialHousekeeping, 
-  initialMaintenance, 
+  initialMaintenance,
   initialOccupancyHistory, 
   initialStats, 
   resortDetails,
@@ -446,13 +452,26 @@ export default function App() {
                 triggerToast(`Maintenance log entered for ${newM.roomNumber}`);
               }}
             />
+          ) : activeTab === 'inventory' ? (
+            <InventoryView />
+          ) : activeTab === 'staff' ? (
+            <StaffManagementView />
+          ) : activeTab === 'whatsapp' ? (
+            <WhatsAppAutomationView />
+          ) : activeTab === 'reviews' ? (
+            <ReviewsManagementView 
+              onNavigateToMaintenance={() => setActiveTab('maintenance')}
+              onNavigateToStaff={() => setActiveTab('staff')}
+            />
           ) : activeTab === 'guests' ? (
             <GuestsCRMView 
               guests={guestsCRM}
               onUpdateGuest={handleUpdateGuestCRM}
               onAddGuest={handleAddGuestCRM}
             />
-          ) : activeTab === 'bookings' || activeTab === 'billing' ? (
+          ) : activeTab === 'billing' ? (
+            <BillingView triggerToast={triggerToast} />
+          ) : activeTab === 'bookings' ? (
             <BookingsView 
               bookings={bookings}
               onAddBooking={(newB) => {
@@ -471,6 +490,8 @@ export default function App() {
               onUpdateTasks={setHousekeeping}
               triggerToast={triggerToast}
             />
+          ) : activeTab === 'maintenance' || activeTab === 'reports' ? (
+            <MaintenanceView />
           ) : (
             // Placeholder view for other modules
             <div className="max-w-3xl mx-auto bg-white border border-slate-200 p-8 rounded-3xl shadow-sm text-center py-20 flex flex-col items-center gap-4">

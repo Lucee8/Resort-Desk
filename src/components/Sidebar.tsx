@@ -9,7 +9,14 @@ import {
   LogOut,
   Sparkles,
   ShieldAlert,
-  Sliders
+  Sliders,
+  Wrench,
+  BarChart3,
+  Plus,
+  Boxes,
+  UserCheck,
+  Star,
+  MessageSquare
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -17,28 +24,41 @@ interface SidebarProps {
   setActiveTab: (tab: string) => void;
   branding: string;
   housekeepingCount: number;
+  maintenanceCount?: number;
+  inventoryAlertCount?: number;
+  staffAlertCount?: number;
+  reviewsAlertCount?: number;
 }
 
 export default function Sidebar({ 
   activeTab, 
   setActiveTab, 
   branding,
-  housekeepingCount 
+  housekeepingCount,
+  maintenanceCount = 18,
+  inventoryAlertCount = 3,
+  staffAlertCount = 3,
+  reviewsAlertCount = 2
 }: SidebarProps) {
   
   const menuItems = [
-    { id: 'dashboard', name: 'Dashboard', icon: LayoutDashboard },
-    { id: 'guests', name: 'Guests', icon: Users },
+    { id: 'dashboard', name: 'Home', icon: LayoutDashboard },
     { id: 'bookings', name: 'Bookings', icon: CalendarRange },
+    { id: 'whatsapp', name: 'WhatsApp', icon: MessageSquare, badge: 8 },
+    { id: 'reviews', name: 'Reviews', icon: Star, badge: reviewsAlertCount > 0 ? reviewsAlertCount : undefined },
+    { id: 'reports', name: 'Analytics', icon: BarChart3 },
+    { id: 'guests', name: 'Guests', icon: Users },
     { id: 'rooms', name: 'Room Management', icon: Sliders },
     { id: 'housekeeping', name: 'Housekeeping', icon: Brush, badge: housekeepingCount > 0 ? housekeepingCount : undefined },
+    { id: 'maintenance', name: 'Maintenance', icon: Wrench, badge: maintenanceCount > 0 ? maintenanceCount : undefined },
+    { id: 'inventory', name: 'Inventory', icon: Boxes, badge: inventoryAlertCount > 0 ? inventoryAlertCount : undefined },
+    { id: 'staff', name: 'Staff', icon: UserCheck, badge: staffAlertCount > 0 ? staffAlertCount : undefined },
     { id: 'billing', name: 'Billing', icon: Receipt },
   ];
 
-
   return (
     <div id="resort-sidebar" className="w-64 h-screen bg-slate-50 border-r border-slate-200/80 flex flex-col justify-between py-6 px-4 shrink-0 font-sans">
-      <div className="flex flex-col gap-8">
+      <div className="flex flex-col gap-6">
         {/* Brand Header */}
         <div className="px-3">
           <div className="flex items-center gap-2">
@@ -66,9 +86,11 @@ export default function Sidebar({
                 id={`sidebar-item-${item.id}`}
                 key={item.id}
                 onClick={() => setActiveTab(item.id)}
-                className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 group ${
+                className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 group cursor-pointer ${
                   isActive 
-                    ? 'bg-teal-800 text-white shadow-md shadow-teal-900/10' 
+                    ? item.id === 'maintenance'
+                      ? 'bg-[#a64b2a] text-white shadow-md shadow-[#a64b2a]/20'
+                      : 'bg-teal-800 text-white shadow-md shadow-teal-900/10' 
                     : 'text-slate-600 hover:bg-slate-150 hover:text-slate-900'
                 }`}
               >
@@ -78,9 +100,13 @@ export default function Sidebar({
                   }`} />
                   <span>{item.name}</span>
                 </div>
-                {item.badge && (
+                {item.badge !== undefined && (
                   <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${
-                    isActive ? 'bg-teal-700 text-white' : 'bg-rose-50 text-rose-600 border border-rose-100'
+                    isActive 
+                      ? 'bg-white/20 text-white' 
+                      : item.id === 'maintenance'
+                        ? 'bg-orange-50 text-[#a64b2a] border border-orange-200'
+                        : 'bg-rose-50 text-rose-600 border border-rose-100'
                   }`}>
                     {item.badge}
                   </span>

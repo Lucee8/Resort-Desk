@@ -1,4 +1,20 @@
-import { Arrival, Departure, HousekeepingTask, MaintenanceAlert, OccupancyDay, ResortStats, Booking, RoomCategory, PropertyAmenity, RoomMaintenanceStatus, GuestCRM } from './types';
+import { 
+  Arrival, 
+  Departure, 
+  HousekeepingTask, 
+  MaintenanceAlert, 
+  OccupancyDay, 
+  ResortStats, 
+  Booking, 
+  RoomCategory, 
+  PropertyAmenity, 
+  RoomMaintenanceStatus, 
+  GuestCRM,
+  MaintenanceTicket,
+  Technician,
+  RecentlyResolvedMaintenance,
+  PredictiveMaintenanceAlert
+} from './types';
 
 export const initialBookings: Booking[] = [
   {
@@ -337,29 +353,444 @@ export const initialHousekeeping: HousekeepingTask[] = [
   }
 ];
 
-export const initialMaintenance: MaintenanceAlert[] = [
+export const initialTechnicians: Technician[] = [
   {
-    id: 'maint-1',
-    roomNumber: '212',
-    title: 'AC cooling unit leakage',
-    priority: 'High',
-    status: 'In Progress'
+    id: 'tech-1',
+    name: 'Rajesh Malik',
+    avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=150&q=80',
+    department: 'General Repair',
+    experience: '12y',
+    activeTicketsCount: 2,
+    completedTicketsCount: 12,
+    efficiency: 85,
+    avgResolutionTime: '42 mins',
+    status: 'Available',
+    phone: '+91 98231 44551',
+    rating: 4.9,
+    specialization: ['HVAC Systems', 'Pumps & Plumbing', 'Masonry & Tiles']
   },
   {
-    id: 'maint-2',
-    roomNumber: '104',
-    title: 'Geyser thermostat malfunctioning',
-    priority: 'Medium',
-    status: 'Open'
+    id: 'tech-2',
+    name: 'Vikram Singh',
+    avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=150&q=80',
+    department: 'Electrical & HVAC',
+    experience: '8y',
+    activeTicketsCount: 0,
+    completedTicketsCount: 16,
+    efficiency: 92,
+    avgResolutionTime: '35 mins',
+    status: 'Available',
+    phone: '+91 98450 11223',
+    rating: 4.8,
+    specialization: ['Main Distribution Panels', 'IoT Smart Locks', 'Wi-Fi APs & Networking']
   },
   {
-    id: 'maint-3',
-    roomNumber: '305',
-    title: 'Balcony door lock jammed',
-    priority: 'Low',
-    status: 'Open'
+    id: 'tech-3',
+    name: 'Anaya Sharma',
+    avatar: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&w=150&q=80',
+    department: 'Interior & Plumbing',
+    experience: '6y',
+    activeTicketsCount: 2,
+    completedTicketsCount: 10,
+    efficiency: 88,
+    avgResolutionTime: '48 mins',
+    status: 'On Break',
+    phone: '+91 98711 33445',
+    rating: 4.7,
+    specialization: ['High-Pressure Showers', 'Custom Carpentry', 'Terracotta Tile Replacement']
+  },
+  {
+    id: 'tech-4',
+    name: 'Karan Kumar',
+    avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&q=80',
+    department: 'Appliances & AV',
+    experience: '5y',
+    activeTicketsCount: 1,
+    completedTicketsCount: 9,
+    efficiency: 82,
+    avgResolutionTime: '50 mins',
+    status: 'Busy',
+    phone: '+91 99002 88991',
+    rating: 4.6,
+    specialization: ['Mini-bar Chillers', 'Smart TVs', 'Kitchen Equipment']
+  },
+  {
+    id: 'tech-5',
+    name: 'Ramesh Singh',
+    avatar: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?auto=format&fit=crop&w=150&q=80',
+    department: 'Civil & Structural',
+    experience: '14y',
+    activeTicketsCount: 0,
+    completedTicketsCount: 14,
+    efficiency: 90,
+    avgResolutionTime: '65 mins',
+    status: 'Available',
+    phone: '+91 98111 22334',
+    rating: 4.9,
+    specialization: ['Waterproofing & Sealants', 'Balcony Deck Wood Care', 'Roofing Tiles']
   }
 ];
+
+export const initialMaintenanceTickets: MaintenanceTicket[] = [
+  {
+    id: 'TKT-1041',
+    title: 'AC Leaking - Water dripping',
+    description: 'Continuous water dripping from the indoor split AC unit above the master luggage rack. Condensation tray is overflowed and needs drain pipe flush.',
+    roomNumber: 'Deluxe Villa #104',
+    area: 'Master Bedroom / Luggage Annex',
+    category: 'HVAC',
+    priority: 'Emergency',
+    status: 'In Progress',
+    reportedBy: 'Anita Desai (Housekeeping)',
+    reportedDate: 'Today, Oct 24',
+    reportedTime: '10:45 AM',
+    assignedTechnicianId: 'tech-1',
+    assignedTechnicianName: 'Rajesh M.',
+    assignedTechnicianAvatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=150&q=80',
+    assignedDepartment: 'General Repair',
+    estimatedCompletionTime: '45 mins',
+    actualResolutionTime: undefined,
+    isRoomBlocked: true,
+    cost: {
+      parts: 1800,
+      labor: 800,
+      vendor: 0,
+      total: 2600
+    },
+    attachments: [
+      { id: 'att-1', name: 'AC_Drip_Photo.jpg', url: 'https://images.unsplash.com/photo-1581092160607-ee22621dd758?auto=format&fit=crop&w=600&q=80', type: 'image', size: '2.4 MB' },
+      { id: 'att-2', name: 'Drain_Telemetry.pdf', url: '#', type: 'doc', size: '340 KB' }
+    ],
+    timeline: [
+      { id: 'tm-1', title: 'Ticket Created', time: '10:45 AM', author: 'Anita Desai (Housekeeping)', note: 'Guest noticed puddle under luggage rack.', done: true },
+      { id: 'tm-2', title: 'Assigned to Rajesh Malik', time: '10:48 AM', author: 'Arun K. (Ops Manager)', note: 'High priority dispatch.', done: true },
+      { id: 'tm-3', title: 'Technician Started Work', time: '10:55 AM', author: 'Rajesh Malik', note: 'Inspecting evaporator coil and condensation pan.', done: true },
+      { id: 'tm-4', title: 'Part Required', time: '11:10 AM', author: 'Rajesh Malik', note: 'Flexible drain siphon pipe replacement.', done: true },
+      { id: 'tm-5', title: 'Part Added from Store', time: '11:20 AM', author: 'Inventory Desk', note: 'Part #DP-14 Issued ($22).', done: false },
+      { id: 'tm-6', title: 'Repair Completed', time: 'Pending', author: 'Rajesh Malik', done: false },
+      { id: 'tm-7', title: 'Manager Verified', time: 'Pending', author: 'Arun K.', done: false },
+      { id: 'tm-8', title: 'Ticket Closed & Room Unblocked', time: 'Pending', author: 'Front Desk', done: false }
+    ],
+    parts: [
+      { id: 'prt-1', name: 'Flexible Drain Siphon Pipe (1.5m)', quantity: 1, cost: 1200, status: 'Ordered' },
+      { id: 'prt-2', name: 'Condensation Sealant Ring', quantity: 2, cost: 600, status: 'In Stock' }
+    ],
+    managerNotes: 'Urgent room turnaround required before 02:00 PM VIP check-in.'
+  },
+  {
+    id: 'TKT-1042',
+    title: 'Broken Tile - Balcony',
+    description: 'Hairline crack and loose non-slip terracotta tile on the sea-facing balcony corner. Potential trip hazard for guests.',
+    roomNumber: 'Sunset Suite #202',
+    area: 'Private Sea Balcony',
+    category: 'Civil/Structural',
+    priority: 'Medium',
+    status: 'Waiting for Parts',
+    reportedBy: 'Housekeeping Team',
+    reportedDate: 'Today, Oct 24',
+    reportedTime: '08:12 AM',
+    assignedTechnicianId: 'tech-3',
+    assignedTechnicianName: 'Anaya S.',
+    assignedTechnicianAvatar: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&w=150&q=80',
+    assignedDepartment: 'Interior & Plumbing',
+    estimatedCompletionTime: '2 hours',
+    isRoomBlocked: false,
+    cost: {
+      parts: 950,
+      labor: 600,
+      vendor: 0,
+      total: 1550
+    },
+    attachments: [
+      { id: 'att-3', name: 'Balcony_Tile_Crack.jpg', url: 'https://images.unsplash.com/photo-1584622650111-993a426fbf0a?auto=format&fit=crop&w=600&q=80', type: 'image', size: '1.8 MB' }
+    ],
+    timeline: [
+      { id: 'tm-11', title: 'Ticket Created', time: '08:12 AM', author: 'Housekeeping Team', note: 'Spotted during morning checkout cleaning.', done: true },
+      { id: 'tm-12', title: 'Assigned to Anaya Sharma', time: '08:30 AM', author: 'Arun K.', done: true },
+      { id: 'tm-13', title: 'Part Required', time: '09:00 AM', author: 'Anaya Sharma', note: 'Matching Konkan terracotta outdoor tile required from vendor.', done: true },
+      { id: 'tm-14', title: 'Awaiting Vendor Delivery', time: '09:15 AM', author: 'Procurement Dept', done: false }
+    ],
+    parts: [
+      { id: 'prt-3', name: 'Terracotta Non-slip Tile (30x30cm)', quantity: 3, cost: 950, status: 'Ordered' }
+    ]
+  },
+  {
+    id: 'TKT-1043',
+    title: 'Door Lock Malfunction',
+    description: 'RFID smart lock reader fails intermittently after morning sea fog. Keycards flash red 4 out of 5 attempts. Battery voltage low warning.',
+    roomNumber: 'Beachfront #005',
+    area: 'Main Entrance Door',
+    category: 'Door & Lock',
+    priority: 'High',
+    status: 'Reported',
+    reportedBy: 'Front Desk (Arun K.)',
+    reportedDate: 'Yesterday, Oct 23',
+    reportedTime: '05:40 PM',
+    assignedTechnicianId: undefined,
+    assignedTechnicianName: undefined,
+    assignedDepartment: undefined,
+    estimatedCompletionTime: '30 mins',
+    isRoomBlocked: true,
+    cost: {
+      parts: 2400,
+      labor: 500,
+      vendor: 0,
+      total: 2900
+    },
+    attachments: [],
+    timeline: [
+      { id: 'tm-21', title: 'Ticket Created', time: '05:40 PM', author: 'Arun K. (Front Desk)', note: 'Guest reported lock refused NFC card 3 times.', done: true }
+    ],
+    parts: [
+      { id: 'prt-4', name: 'CR123A Lithium Cells (4-pack)', quantity: 1, cost: 1200, status: 'In Stock' },
+      { id: 'prt-5', name: 'RFID Antenna Moisture Shield', quantity: 1, cost: 1200, status: 'In Stock' }
+    ]
+  },
+  {
+    id: 'TKT-1044',
+    title: 'Jacuzzi Jet Pressure Low',
+    description: 'Circulation hydro-pump in private outdoor jacuzzi making humming noise with reduced water pressure. Flow sensor reading 40% below benchmark.',
+    roomNumber: 'Royal Villa #108',
+    area: 'Private Jacuzzi Deck',
+    category: 'Plumbing',
+    priority: 'High',
+    status: 'In Progress',
+    reportedBy: 'Guest: Arjun M.',
+    reportedDate: 'Today, Oct 24',
+    reportedTime: '09:30 AM',
+    assignedTechnicianId: 'tech-2',
+    assignedTechnicianName: 'Vikram Singh',
+    assignedTechnicianAvatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=150&q=80',
+    assignedDepartment: 'Electrical & HVAC',
+    estimatedCompletionTime: '1 hour',
+    isRoomBlocked: true,
+    cost: {
+      parts: 3200,
+      labor: 1200,
+      vendor: 0,
+      total: 4400
+    },
+    attachments: [
+      { id: 'att-4', name: 'Pump_Audio_Recording.mp3', url: '#', type: 'video', size: '3.1 MB' }
+    ],
+    timeline: [
+      { id: 'tm-31', title: 'Ticket Created', time: '09:30 AM', author: 'Guest App', done: true },
+      { id: 'tm-32', title: 'Assigned to Vikram Singh', time: '09:35 AM', author: 'Arun K.', done: true },
+      { id: 'tm-33', title: 'Technician Started Work', time: '09:50 AM', author: 'Vikram Singh', note: 'Impeller de-clogging and capacitor test underway.', done: true }
+    ]
+  },
+  {
+    id: 'TKT-1045',
+    title: 'WiFi Repeater Offline',
+    description: 'Wi-Fi 6 access point signal drops in master bathroom and study desk. Gateway port ping test timed out.',
+    roomNumber: 'Garden Cottage #304',
+    area: 'Study Corner & Bathroom',
+    category: 'Internet/Wi-Fi',
+    priority: 'Low',
+    status: 'Assigned',
+    reportedBy: 'Guest App Report',
+    reportedDate: 'Today, Oct 24',
+    reportedTime: '11:20 AM',
+    assignedTechnicianId: 'tech-2',
+    assignedTechnicianName: 'Vikram Singh',
+    assignedTechnicianAvatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=150&q=80',
+    assignedDepartment: 'Electrical & HVAC',
+    estimatedCompletionTime: '20 mins',
+    isRoomBlocked: false,
+    cost: {
+      parts: 0,
+      labor: 400,
+      vendor: 0,
+      total: 400
+    },
+    attachments: [],
+    timeline: [
+      { id: 'tm-41', title: 'Ticket Created', time: '11:20 AM', author: 'Guest App', done: true },
+      { id: 'tm-42', title: 'Assigned to Vikram Singh', time: '11:25 AM', author: 'Arun K.', done: true }
+    ]
+  },
+  {
+    id: 'TKT-1046',
+    title: 'Shower Basin Drainage Slow',
+    description: 'Shower basin takes ~10 minutes to drain after bath. Sand and organic buildup suspected from private beach access.',
+    roomNumber: 'Deluxe Sea View #205',
+    area: 'Master En-suite Bathroom',
+    category: 'Plumbing',
+    priority: 'Medium',
+    status: 'In Progress',
+    reportedBy: 'Sunita Bai (Housekeeping)',
+    reportedDate: 'Yesterday, Oct 23',
+    reportedTime: '03:15 PM',
+    assignedTechnicianId: 'tech-3',
+    assignedTechnicianName: 'Anaya S.',
+    assignedTechnicianAvatar: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&w=150&q=80',
+    assignedDepartment: 'Interior & Plumbing',
+    estimatedCompletionTime: '35 mins',
+    isRoomBlocked: false,
+    cost: {
+      parts: 450,
+      labor: 500,
+      vendor: 0,
+      total: 950
+    },
+    attachments: [],
+    timeline: [
+      { id: 'tm-51', title: 'Ticket Created', time: '03:15 PM', author: 'Sunita Bai', done: true },
+      { id: 'tm-52', title: 'Assigned to Anaya Sharma', time: '03:30 PM', author: 'Arun K.', done: true },
+      { id: 'tm-53', title: 'Technician Started Work', time: '04:00 PM', author: 'Anaya Sharma', done: true }
+    ]
+  },
+  {
+    id: 'TKT-1047',
+    title: 'Mini Bar Chiller Vibration',
+    description: 'Subtle humming vibration from compressor foot mount when chilling beverage inventory.',
+    roomNumber: 'Executive Suite #301',
+    area: 'Bar Cabinet',
+    category: 'Appliance',
+    priority: 'Low',
+    status: 'Resolved',
+    reportedBy: 'Karan Kumar',
+    reportedDate: 'Yesterday, Oct 23',
+    reportedTime: '02:15 PM',
+    assignedTechnicianId: 'tech-1',
+    assignedTechnicianName: 'Rajesh Malik',
+    assignedTechnicianAvatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=150&q=80',
+    assignedDepartment: 'General Repair',
+    estimatedCompletionTime: '25 mins',
+    actualResolutionTime: '22 mins',
+    isRoomBlocked: false,
+    cost: {
+      parts: 350,
+      labor: 400,
+      vendor: 0,
+      total: 750
+    },
+    attachments: [],
+    timeline: [
+      { id: 'tm-61', title: 'Ticket Created', time: '02:15 PM', author: 'Karan Kumar', done: true },
+      { id: 'tm-62', title: 'Repaired & Leveled', time: '02:37 PM', author: 'Rajesh Malik', note: 'Replaced rubber anti-vibration foot pad.', done: true },
+      { id: 'tm-63', title: 'Manager Verified', time: '03:00 PM', author: 'Arun K.', done: true }
+    ]
+  },
+  {
+    id: 'TKT-1048',
+    title: 'Main Pool Multi-port Sand Filter Valve Sticking',
+    description: 'Sand filtration valve stuck in recirculate mode. Pool zone cordoned off for routine backwash and chlorine dosing check.',
+    roomNumber: 'Infinity Pool Zone A',
+    area: 'Outdoor Amenities',
+    category: 'Plumbing',
+    priority: 'Emergency',
+    status: 'In Progress',
+    reportedBy: 'Facility Ops',
+    reportedDate: 'Today, Oct 24',
+    reportedTime: '07:00 AM',
+    assignedTechnicianId: 'tech-1',
+    assignedTechnicianName: 'Rajesh Malik',
+    assignedTechnicianAvatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=150&q=80',
+    assignedDepartment: 'General Repair',
+    estimatedCompletionTime: '3 hours',
+    isRoomBlocked: true,
+    cost: {
+      parts: 4500,
+      labor: 1500,
+      vendor: 3000,
+      total: 9000
+    },
+    attachments: [],
+    timeline: [
+      { id: 'tm-71', title: 'Ticket Created', time: '07:00 AM', author: 'Facility Ops', done: true },
+      { id: 'tm-72', title: 'Dispatched to Rajesh Malik', time: '07:10 AM', author: 'Arun K.', done: true },
+      { id: 'tm-73', title: 'Technician on Site', time: '07:25 AM', author: 'Rajesh Malik', done: true }
+    ]
+  }
+];
+
+export const initialRecentlyResolved: RecentlyResolvedMaintenance[] = [
+  {
+    id: 'rr-1',
+    title: 'Faucet Leak Fixed',
+    roomNumber: 'Room 302',
+    technicianName: 'Rajesh M.',
+    technicianAvatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=150&q=80',
+    completedAgo: '2h ago',
+    resolutionTime: '28 mins',
+    verificationStatus: 'Verified'
+  },
+  {
+    id: 'rr-2',
+    title: 'WiFi Router Reset',
+    roomNumber: 'Room 104',
+    technicianName: 'Vikram S.',
+    technicianAvatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=150&q=80',
+    completedAgo: '4h ago',
+    resolutionTime: '15 mins',
+    verificationStatus: 'Verified'
+  },
+  {
+    id: 'rr-3',
+    title: 'Balcony Lock Lubrication',
+    roomNumber: 'Villa #205',
+    technicianName: 'Anaya S.',
+    technicianAvatar: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&w=150&q=80',
+    completedAgo: '6h ago',
+    resolutionTime: '20 mins',
+    verificationStatus: 'Verified'
+  },
+  {
+    id: 'rr-4',
+    title: 'Ceiling Fan Regulator Replaced',
+    roomNumber: 'Room 110',
+    technicianName: 'Vikram S.',
+    technicianAvatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=150&q=80',
+    completedAgo: 'Yesterday',
+    resolutionTime: '32 mins',
+    verificationStatus: 'Auto-Closed'
+  }
+];
+
+export const initialPredictiveAlerts: PredictiveMaintenanceAlert[] = [
+  {
+    id: 'pma-1',
+    equipment: 'Daikin Multi-Split Inverter AC',
+    roomNumber: 'Villa #104',
+    issuePrediction: 'Possible HVAC Failure',
+    riskScore: 82,
+    reason: '3 HVAC-related complaints in the last 30 days. Most recent issue was reported today. Telemetry indicates elevated compressor head temperature.',
+    recommendedAction: 'Schedule preventive inspection and chemical coil flush before next guest check-in.',
+    category: 'HVAC'
+  },
+  {
+    id: 'pma-2',
+    equipment: 'Grohe Pressure Balance Cartridge',
+    roomNumber: 'Villa #205',
+    issuePrediction: 'Water Pressure Drop Risk',
+    riskScore: 67,
+    reason: 'Inline pressure sensor telemetry detected an 18% variance under high resort occupancy hours.',
+    recommendedAction: 'Inspect inline booster pressure regulator and replace internal mesh filter.',
+    category: 'Plumbing'
+  },
+  {
+    id: 'pma-3',
+    equipment: 'Assa Abloy RFID Smart Deadbolt',
+    roomNumber: 'Beachfront #005',
+    issuePrediction: 'Door Lock Battery Depletion',
+    riskScore: 91,
+    reason: 'Lock telemetry reported battery voltage dropped to 3.2V (critical threshold 3.0V). Humidity degradation detected on contacts.',
+    recommendedAction: 'Replace CR123A battery cells and apply silicone gasket sealant immediately.',
+    category: 'Door & Lock'
+  },
+  {
+    id: 'pma-4',
+    equipment: 'Solar Water Heating System (Zone B)',
+    roomNumber: 'Cottages 201-206',
+    issuePrediction: 'Thermal Exchanger Mineral Scaling',
+    riskScore: 74,
+    reason: 'Thermal transfer coefficient down 14% over 4 weeks due to Konkan coastal groundwater hardness.',
+    recommendedAction: 'Execute non-toxic citric acid descaling flush during tomorrow morning low-demand window.',
+    category: 'Electrical'
+  }
+];
+
 
 export const initialOccupancyHistory: OccupancyDay[] = [
   { day: 'Mon', rate: 65, bookings: 13 },
@@ -439,6 +870,12 @@ export const initialRoomMaintenance: RoomMaintenanceStatus[] = [
   { id: 'rm-2', roomNumber: 'Room 105', roomType: 'Cottage', issue: 'Check-out Inspection', status: 'Pending' },
   { id: 'rm-3', roomNumber: 'Room 208', roomType: 'Deluxe', issue: 'Ready for Check-in', status: 'Verified' },
   { id: 'rm-4', roomNumber: 'Room 301', roomType: 'Deluxe', issue: 'Deep Clean Schedule', status: 'Scheduled' }
+];
+
+export const initialMaintenance: MaintenanceAlert[] = [
+  { id: 'm-1', roomNumber: 'Room 402', title: 'AC Leak Repair', priority: 'High', status: 'Open' },
+  { id: 'm-2', roomNumber: 'Room 105', title: 'Door Lock Battery', priority: 'Medium', status: 'Open' },
+  { id: 'm-3', roomNumber: 'Room 208', title: 'Water Pressure Low', priority: 'Low', status: 'Resolved' }
 ];
 
 export const initialGuestsCRM: GuestCRM[] = [
