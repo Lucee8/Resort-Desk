@@ -1081,8 +1081,369 @@ export interface MyraFinanceAssistantInsight {
   payload?: any;
 }
 
+// ----------------------------------------------------
+// SETTINGS MODULE TYPES
+// ----------------------------------------------------
 
+export type SettingsSectionId =
+  | 'resort-profile'
+  | 'staff-roles'
+  | 'myra-ai'
+  | 'integrations'
+  | 'billing-gst'
+  | 'notifications'
+  | 'whatsapp'
+  | 'booking-rules'
+  | 'operations'
+  | 'security-privacy'
+  | 'audit-logs'
+  | 'api-developer'
+  | 'backup-data'
+  | 'localization'
+  | 'appearance'
+  | 'emergency-safety';
 
+export type SettingsCategory = 'GENERAL' | 'INTELLIGENCE' | 'SYSTEM' | 'SECURITY' | 'OTHER';
 
+export interface SettingsSearchIndexItem {
+  id: SettingsSectionId;
+  category: SettingsCategory;
+  title: string;
+  description: string;
+  keywords: string[];
+}
 
+export interface ResortProfileSettings {
+  logoUrl: string;
+  propertyName: string;
+  legalEntityName: string;
+  primaryEmail: string;
+  supportPhone: string;
+  websiteUrl: string;
+  registeredAddress: string;
+  city: string;
+  state: string;
+  pincode: string;
+  country: string;
+  checkInTime: string;
+  checkOutTime: string;
+  baseCurrency: string;
+  currencySymbol: string;
+  systemTimeZone: string;
+  gstin: string;
+  panNumber: string;
+  cancellationPolicy: string;
+  bookingTerms: string;
+}
 
+export interface RolePermissions {
+  view: boolean;
+  createEdit: boolean;
+  delete: boolean;
+  export: boolean;
+  approve: boolean;
+}
+
+export interface ModulePermissionRow {
+  moduleId: string;
+  moduleName: string;
+  description: string;
+  permissions: {
+    [roleKey: string]: RolePermissions;
+  };
+}
+
+export interface StaffRoleItem {
+  id: string;
+  name: string;
+  roleKey: string;
+  badgeType: 'SYSTEM DEFAULT' | 'CUSTOM';
+  description: string;
+  memberCount: number;
+  membersAvatars: string[];
+}
+
+export interface StaffSession {
+  id: string;
+  userName: string;
+  userRole: string;
+  device: string;
+  browser: string;
+  ipAddress: string;
+  location: string;
+  loginTime: string;
+  isCurrent: boolean;
+}
+
+export interface LoginHistoryItem {
+  id: string;
+  userName: string;
+  role: string;
+  ipAddress: string;
+  timestamp: string;
+  status: 'Success' | 'Failed' | 'Blocked (2FA)';
+  location: string;
+}
+
+export interface MyraAISettings {
+  enabled: boolean;
+  autonomousChatbot: boolean;
+  autoBookingEngine: boolean;
+  aiUpselling: boolean;
+  complaintHandling: boolean;
+  postStayFollowUp: boolean;
+  humanEscalation: boolean;
+  confidenceThreshold: number; // 0 to 100
+  tone: 'formal' | 'warm' | 'friendly'; // strictly formal, professional yet warm, casual & friendly
+  greetingPrefix: string;
+  signatureText: string;
+  supportedLanguages: string[];
+  autoAssignRoom: boolean;
+  tentativeHoldHours: number;
+  monthlyMinutesLimit: number;
+  monthlyMinutesUsed: number;
+  whatsappMessageLimit: number;
+  whatsappMessagesUsed: number;
+  guestMemoryRetentionDays: number;
+}
+
+export interface KnowledgeBaseItem {
+  id: string;
+  category: 'Policies' | 'Amenities' | 'Dining' | 'Transport' | 'Local Guide';
+  question: string;
+  answer: string;
+  lastUpdated: string;
+  isPublished: boolean;
+}
+
+export type IntegrationStatus = 'Connected' | 'Not Connected' | 'Auth Failed' | 'Syncing' | 'Expired';
+export type IntegrationCategory = 'All Apps' | 'OTAs' | 'Payments' | 'Communication' | 'Accounting';
+
+export interface IntegrationItem {
+  id: string;
+  name: string;
+  category: 'OTAs' | 'Payments' | 'Communication' | 'Accounting' | 'Developer';
+  description: string;
+  iconType: string;
+  status: IntegrationStatus;
+  statusText?: string;
+  lastSync?: string;
+  accountIdentifier?: string;
+  configFields: {
+    key: string;
+    label: string;
+    type: 'text' | 'password' | 'select' | 'toggle';
+    value: string;
+    placeholder?: string;
+    options?: string[];
+  }[];
+}
+
+export interface SACRateItem {
+  code: string;
+  serviceName: string;
+  gstRate: number; // e.g. 12, 18, 5
+  description: string;
+}
+
+export interface BillingGSTSettings {
+  gstin: string;
+  legalBusinessName: string;
+  stateCode: string;
+  invoicePrefix: string;
+  nextInvoiceNumber: number;
+  fySequence: string; // e.g. "2026-27"
+  defaultGstRate: number;
+  fnbGstRate: number;
+  spaGstRate: number;
+  sacRates: SACRateItem[];
+  enableInterstateIGST: boolean;
+  autoDispatchInvoiceWhatsApp: boolean;
+  autoDispatchInvoiceEmail: boolean;
+  razorpayMerchantId: string;
+  razorpayAutoSettle: boolean;
+  refundProcessingDays: number;
+  cancellationRetentionGSTRules: boolean;
+}
+
+export interface NotificationRuleItem {
+  id: string;
+  event: string;
+  description: string;
+  category: 'Reservations' | 'Financial' | 'Operations' | 'Urgent';
+  whatsapp: boolean;
+  email: boolean;
+  sms: boolean;
+  inApp: boolean;
+  targetRole: string;
+}
+
+export interface WhatsAppTemplateItem {
+  id: string;
+  name: string;
+  category: 'MARKETING' | 'UTILITY' | 'AUTHENTICATION';
+  language: string;
+  status: 'APPROVED' | 'PENDING' | 'REJECTED';
+  bodyText: string;
+  lastUpdated: string;
+}
+
+export interface WhatsAppSettingsConfig {
+  phoneNumber: string;
+  wabaId: string;
+  displayName: string;
+  status: 'Verified & Active' | 'Pending Review' | 'Disconnected';
+  autoBotReplies: boolean;
+  humanHandoffKeywords: string;
+  businessHoursStart: string;
+  businessHoursEnd: string;
+  outOfHoursMessage: string;
+  templates: WhatsAppTemplateItem[];
+}
+
+export interface BookingRulesSettings {
+  minStayNights: number;
+  maxStayNights: number;
+  weekendMinStayNights: number;
+  advanceDepositPercentage: number;
+  peakSeasonAdvanceDeposit: number;
+  freeCancellationHours: number;
+  tier2CancellationHours: number;
+  tier2RetentionPercentage: number;
+  earlyCheckInHourlyFee: number;
+  lateCheckOutHourlyFee: number;
+  extraGuestAdultCharge: number;
+  extraChildCharge: number;
+  rollawayBedCharge: number;
+  petPolicyAllowed: boolean;
+  petSanitizationFee: number;
+  autoRoomAssignmentMode: 'Cleanest & Balanced' | 'Floor Sequential' | 'Manual Only';
+  overbookingSafetyBufferPercentage: number;
+}
+
+export interface OperationsSettings {
+  housekeepingTurnoverMins: number;
+  suiteTurnoverMins: number;
+  deepCleanIntervalDays: number;
+  requirePhotoVerification: boolean;
+  maintenanceSlaEmergencyHours: number;
+  maintenanceSlaHighHours: number;
+  maintenanceSlaMediumHours: number;
+  maintenanceSlaLowHours: number;
+  preventativeAcServiceDays: number;
+  preventativeWaterTankDays: number;
+  inventoryLowStockThresholdPercent: number;
+  autoDraftVendorPO: boolean;
+}
+
+export interface SecurityPrivacySettings {
+  minPasswordLength: number;
+  requireSpecialChar: boolean;
+  passwordExpiryDays: number;
+  enforce2FAForManagers: boolean;
+  enforce2FAForAll: boolean;
+  sessionTimeoutMinutes: number;
+  ipAllowlistEnabled: boolean;
+  allowedIPs: string;
+  guestPiiRetentionYears: number;
+  anonymizeCheckedOutGuests: boolean;
+}
+
+export interface AuditLogRecord {
+  id: string;
+  user: string;
+  userRole: string;
+  avatar: string;
+  action: 'UPDATE' | 'CREATE' | 'DELETE' | 'AUTH' | 'EXPORT';
+  module: string;
+  summary: string;
+  oldValue?: string;
+  newValue?: string;
+  ipAddress: string;
+  timestamp: string;
+}
+
+export interface APIKeyItem {
+  id: string;
+  name: string;
+  keyPrefix: string;
+  scopes: string[];
+  createdDate: string;
+  lastUsed: string;
+  status: 'Active' | 'Revoked';
+}
+
+export interface WebhookItem {
+  id: string;
+  url: string;
+  events: string[];
+  status: 'Active' | 'Failing' | 'Disabled';
+  secretMasked: string;
+  lastDelivery: string;
+  successRate: string;
+}
+
+export interface BackupHistoryItem {
+  id: string;
+  timestamp: string;
+  size: string;
+  type: 'Automated Daily' | 'Manual Snapshot' | 'Pre-Upgrade';
+  status: 'Completed (Verified)' | 'In Progress' | 'Failed';
+  storageLocation: string;
+  downloadUrl?: string;
+}
+
+export interface LocalizationSettings {
+  primaryLanguage: string;
+  additionalLanguages: string[];
+  currencyCode: string;
+  currencySymbol: string;
+  timeZone: string;
+  dateFormat: string;
+  numberFormat: 'Indian (12,50,000.00)' | 'International (1,250,000.00)';
+  temperatureUnit: 'Celsius (°C)' | 'Fahrenheit (°F)';
+}
+
+export interface AppearanceSettings {
+  theme: 'light' | 'slate' | 'dark';
+  accentColor: 'emerald' | 'indigo' | 'terracotta' | 'amber';
+  density: 'comfortable' | 'compact';
+  customBrandingName: string;
+  highContrastMode: boolean;
+}
+
+export interface EmergencyContactItem {
+  id: string;
+  type: 'Police' | 'Fire' | 'Hospital' | 'Doctor' | 'Security' | 'Management';
+  name: string;
+  organization: string;
+  phone: string;
+  alternatePhone?: string;
+  address?: string;
+  isPrimary: boolean;
+}
+
+export interface ResortDeskSettings {
+  profile: ResortProfileSettings;
+  staff: StaffMember[];
+  staffRoles: StaffRoleItem[];
+  modulePermissions: ModulePermissionRow[];
+  staffSessions: StaffSession[];
+  loginHistory: LoginHistoryItem[];
+  myraEngine: MyraAISettings;
+  knowledgeBase: KnowledgeBaseItem[];
+  integrations: IntegrationItem[];
+  billingGst: BillingGSTSettings;
+  notifications: NotificationRuleItem[];
+  whatsapp: WhatsAppSettingsConfig;
+  bookingRules: BookingRulesSettings;
+  operations: OperationsSettings;
+  security: SecurityPrivacySettings;
+  auditLogs: AuditLogRecord[];
+  apiKeys: APIKeyItem[];
+  webhooks: WebhookItem[];
+  backups: BackupHistoryItem[];
+  localization: LocalizationSettings;
+  appearance: AppearanceSettings;
+  emergencyContacts: EmergencyContactItem[];
+}

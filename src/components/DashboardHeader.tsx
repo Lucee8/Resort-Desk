@@ -6,13 +6,15 @@ interface DashboardHeaderProps {
   setSearchQuery: (query: string) => void;
   notificationsCount: number;
   onClearNotifications?: () => void;
+  onOpenSettings?: () => void;
 }
 
 export default function DashboardHeader({
   searchQuery,
   setSearchQuery,
   notificationsCount,
-  onClearNotifications
+  onClearNotifications,
+  onOpenSettings
 }: DashboardHeaderProps) {
   const [showNotificationDropdown, setShowNotificationDropdown] = useState(false);
 
@@ -107,8 +109,9 @@ export default function DashboardHeader({
           {/* Settings */}
           <button
             id="header-settings-btn"
-            onClick={() => alert("Resort settings panel coming soon in Module 2!")}
-            className="p-2 rounded-full hover:bg-slate-100 transition-colors text-slate-600 hover:text-slate-900"
+            onClick={onOpenSettings}
+            className="p-2 rounded-full hover:bg-slate-100 transition-colors text-slate-600 hover:text-slate-900 cursor-pointer"
+            title="System Settings"
           >
             <Settings className="w-4 h-4" />
           </button>

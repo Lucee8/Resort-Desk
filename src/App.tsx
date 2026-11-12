@@ -34,6 +34,7 @@ import StaffManagementView from './components/StaffManagementView';
 import ReviewsManagementView from './components/ReviewsManagementView';
 import WhatsAppAutomationView from './components/WhatsAppAutomationView';
 import BillingView from './components/billing/BillingView';
+import SettingsView from './components/settings/SettingsView';
 
 import { 
   initialArrivals, 
@@ -349,6 +350,7 @@ export default function App() {
           setSearchQuery={setSearchQuery}
           notificationsCount={notificationsCount}
           onClearNotifications={handleClearNotifications}
+          onOpenSettings={() => setActiveTab('settings')}
         />
 
         {/* Dynamic Navigation Content */}
@@ -471,6 +473,11 @@ export default function App() {
             />
           ) : activeTab === 'billing' ? (
             <BillingView triggerToast={triggerToast} />
+          ) : activeTab === 'settings' ? (
+            <SettingsView 
+              onNavigateToBilling={() => setActiveTab('billing')}
+              triggerToast={triggerToast}
+            />
           ) : activeTab === 'bookings' ? (
             <BookingsView 
               bookings={bookings}

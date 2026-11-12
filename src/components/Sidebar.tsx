@@ -16,7 +16,8 @@ import {
   Boxes,
   UserCheck,
   Star,
-  MessageSquare
+  MessageSquare,
+  Settings
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -54,6 +55,7 @@ export default function Sidebar({
     { id: 'inventory', name: 'Inventory', icon: Boxes, badge: inventoryAlertCount > 0 ? inventoryAlertCount : undefined },
     { id: 'staff', name: 'Staff', icon: UserCheck, badge: staffAlertCount > 0 ? staffAlertCount : undefined },
     { id: 'billing', name: 'Billing', icon: Receipt },
+    { id: 'settings', name: 'Settings', icon: Settings },
   ];
 
   return (
