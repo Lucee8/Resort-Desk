@@ -141,7 +141,12 @@ export const initialArrivals: Arrival[] = [
     status: 'Checked In',
     avatar: 'RK',
     phone: '+91 98765 43210',
-    checkInTime: '09:30 AM'
+    checkInTime: '09:30 AM',
+    bookingStatus: 'Confirmed',
+    paymentStatus: 'Paid',
+    amountDue: 0,
+    nights: 3,
+    bookingId: 'b-1'
   },
   {
     id: 'arr-2',
@@ -150,7 +155,12 @@ export const initialArrivals: Arrival[] = [
     status: 'Arriving',
     avatar: 'SD',
     phone: '+91 87654 32109',
-    checkInTime: '01:30 PM'
+    checkInTime: '01:30 PM (Early)',
+    bookingStatus: 'Confirmed',
+    paymentStatus: 'Paid',
+    amountDue: 0,
+    nights: 2,
+    bookingId: 'b-2'
   },
   {
     id: 'arr-3',
@@ -159,7 +169,12 @@ export const initialArrivals: Arrival[] = [
     status: 'Expected',
     avatar: 'VM',
     phone: '+91 76543 21098',
-    checkInTime: '03:00 PM'
+    checkInTime: '03:00 PM',
+    bookingStatus: 'Confirmed',
+    paymentStatus: 'Partial',
+    amountDue: 3500,
+    nights: 4,
+    bookingId: 'b-3'
   },
   {
     id: 'arr-4',
@@ -168,7 +183,12 @@ export const initialArrivals: Arrival[] = [
     status: 'Expected',
     avatar: 'NS',
     phone: '+91 65432 10987',
-    checkInTime: '05:30 PM'
+    checkInTime: '05:30 PM',
+    bookingStatus: 'Tentative',
+    paymentStatus: 'Pending',
+    amountDue: 8200,
+    nights: 2,
+    bookingId: 'b-4'
   }
 ];
 
@@ -180,7 +200,10 @@ export const initialDepartures: Departure[] = [
     status: 'Pending',
     avatar: 'AS',
     checkoutTime: '11:00 AM',
-    amountDue: 4500
+    amountDue: 4500,
+    bookingStatus: 'Active',
+    paymentStatus: 'Due',
+    bookingId: 'b-105'
   },
   {
     id: 'dep-2',
@@ -189,7 +212,10 @@ export const initialDepartures: Departure[] = [
     status: 'Checked Out',
     avatar: 'PR',
     checkoutTime: '09:15 AM',
-    amountDue: 0
+    amountDue: 0,
+    bookingStatus: 'Completed',
+    paymentStatus: 'Paid',
+    bookingId: 'b-301'
   },
   {
     id: 'dep-3',
@@ -198,7 +224,10 @@ export const initialDepartures: Departure[] = [
     status: 'Scheduled',
     avatar: 'JD',
     checkoutTime: '12:00 PM',
-    amountDue: 3700
+    amountDue: 3700,
+    bookingStatus: 'Active',
+    paymentStatus: 'Due',
+    bookingId: 'b-215'
   },
   {
     id: 'dep-4',
@@ -207,7 +236,10 @@ export const initialDepartures: Departure[] = [
     status: 'Scheduled',
     avatar: 'RG',
     checkoutTime: '12:30 PM',
-    amountDue: 0
+    amountDue: 0,
+    bookingStatus: 'Active',
+    paymentStatus: 'Paid',
+    bookingId: 'b-110'
   }
 ];
 
@@ -813,12 +845,12 @@ export const initialStats: ResortStats = {
 };
 
 export const resortDetails = {
-  name: 'Konkan Retreat',
+  name: 'Mykonos Cottage',
   branding: 'Mykonos Cottage',
-  tagline: 'Luxury Coastal Sanctuary',
-  location: 'Ratnagiri, Konkan',
-  weather: '28°C Sunny',
-  event: 'Local Seafood Festival nearby',
+  tagline: 'Boutique Beachfront Sanctuary',
+  location: 'Tarkarli, Malvan',
+  weather: '29°C Tropical Breeze',
+  event: 'Tarkarli Water Sports & Scuba Season',
   bannerImage: 'https://images.unsplash.com/photo-1540541338287-41700207dee6?auto=format&fit=crop&w=1200&q=80'
 };
 

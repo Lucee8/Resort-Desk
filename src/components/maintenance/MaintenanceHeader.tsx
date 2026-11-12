@@ -46,7 +46,7 @@ export default function MaintenanceHeader({
   const [showPropertyDropdown, setShowPropertyDropdown] = useState(false);
 
   const roles: MaintenanceUserRole[] = ['Resort Owner', 'Manager', 'Technician', 'Receptionist'];
-  const properties = ['Konkan Retreat (Main)', 'Mykonos Villas (Beachfront)', 'Coconut Grove Cottages'];
+  const properties = ['Mykonos Cottage (Beachfront)', 'Mykonos Garden Cottages', 'Sunset Beach Suites'];
 
   return (
     <header className="w-full bg-white border-b border-slate-200/80 px-6 py-4 flex flex-col md:flex-row md:items-center md:justify-between gap-4 sticky top-0 z-20 shadow-xs">

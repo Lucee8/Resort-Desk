@@ -7,17 +7,16 @@ import {
   Receipt, 
   LifeBuoy, 
   LogOut,
-  Sparkles,
-  ShieldAlert,
-  Sliders,
-  Wrench,
-  BarChart3,
-  Plus,
-  Boxes,
-  UserCheck,
-  Star,
-  MessageSquare,
-  Settings
+  Sliders, 
+  Wrench, 
+  BarChart3, 
+  Boxes, 
+  UserCheck, 
+  Star, 
+  MessageSquare, 
+  Settings,
+  X,
+  MapPin
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -29,6 +28,8 @@ interface SidebarProps {
   inventoryAlertCount?: number;
   staffAlertCount?: number;
   reviewsAlertCount?: number;
+  isMobileOpen?: boolean;
+  onCloseMobile?: () => void;
 }
 
 export default function Sidebar({ 
@@ -39,7 +40,9 @@ export default function Sidebar({
   maintenanceCount = 18,
   inventoryAlertCount = 3,
   staffAlertCount = 3,
-  reviewsAlertCount = 2
+  reviewsAlertCount = 2,
+  isMobileOpen = false,
+  onCloseMobile
 }: SidebarProps) {
   
   const menuItems = [
@@ -58,24 +61,44 @@ export default function Sidebar({
     { id: 'settings', name: 'Settings', icon: Settings },
   ];
 
-  return (
-    <div id="resort-sidebar" className="w-64 h-screen bg-slate-50 border-r border-slate-200/80 flex flex-col justify-between py-6 px-4 shrink-0 font-sans">
-      <div className="flex flex-col gap-6">
+  const handleSelectTab = (id: string) => {
+    setActiveTab(id);
+    if (onCloseMobile) {
+      onCloseMobile();
+    }
+  };
+
+  const sidebarContent = (
+    <div className="w-64 h-full bg-slate-50 border-r border-slate-200/80 flex flex-col justify-between py-6 px-4 font-sans select-none overflow-y-auto">
+      <div className="flex flex-col gap-5">
         {/* Brand Header */}
-        <div className="px-3">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-teal-700 flex items-center justify-center text-white font-serif font-bold text-lg shadow-sm shadow-teal-700/20">
+        <div className="px-2 flex items-center justify-between">
+          <div className="flex items-center gap-2.5">
+            <div className="w-9 h-9 rounded-xl bg-teal-800 flex items-center justify-center text-white font-serif font-bold text-lg shadow-sm shadow-teal-900/20 shrink-0">
               M
             </div>
-            <div>
-              <h1 className="font-serif font-bold text-lg text-teal-900 tracking-wide leading-tight">
-                {branding}
+            <div className="min-w-0">
+              <h1 className="font-serif font-bold text-base text-teal-950 tracking-wide leading-tight truncate">
+                {branding || 'Mykonos Cottage'}
               </h1>
-              <p className="text-[10px] uppercase tracking-widest text-slate-400 font-semibold">
-                Staff Portal
+              <p className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider flex items-center gap-1 mt-0.5">
+                <MapPin className="w-2.5 h-2.5 text-amber-600" />
+                <span>Tarkarli, Malvan</span>
               </p>
             </div>
           </div>
+
+          {/* Close button on mobile view */}
+          {onCloseMobile && (
+            <button
+              type="button"
+              onClick={onCloseMobile}
+              className="lg:hidden p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-200/60"
+              title="Close menu"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          )}
         </div>
 
         {/* Navigation Menu */}
@@ -87,13 +110,13 @@ export default function Sidebar({
               <button
                 id={`sidebar-item-${item.id}`}
                 key={item.id}
-                onClick={() => setActiveTab(item.id)}
-                className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 group cursor-pointer ${
+                onClick={() => handleSelectTab(item.id)}
+                className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-semibold transition-all duration-150 group cursor-pointer ${
                   isActive 
                     ? item.id === 'maintenance'
                       ? 'bg-[#a64b2a] text-white shadow-md shadow-[#a64b2a]/20'
                       : 'bg-teal-800 text-white shadow-md shadow-teal-900/10' 
-                    : 'text-slate-600 hover:bg-slate-150 hover:text-slate-900'
+                    : 'text-slate-600 hover:bg-slate-150/80 hover:text-slate-900'
                 }`}
               >
                 <div className="flex items-center gap-3">
@@ -120,29 +143,53 @@ export default function Sidebar({
       </div>
 
       {/* Footer Navigation */}
-      <div className="flex flex-col gap-1 border-t border-slate-200/60 pt-4">
+      <div className="flex flex-col gap-1 border-t border-slate-200/60 pt-4 mt-4">
         <button
           id="sidebar-support-btn"
-          onClick={() => alert("ResortDesk Premium Support is available 24/7 at support@resortdesk.ai")}
-          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-slate-500 hover:bg-slate-150 hover:text-slate-800 transition-all duration-200 group"
+          onClick={() => alert("Mykonos Cottage ResortDesk Support is available 24/7 at support@resortdesk.ai")}
+          className="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-semibold text-slate-500 hover:bg-slate-150 hover:text-slate-800 transition-all duration-150 cursor-pointer"
         >
-          <LifeBuoy className="w-[18px] h-[18px] text-slate-400 group-hover:text-slate-600" />
-          <span>Support</span>
+          <LifeBuoy className="w-4 h-4 text-slate-400" />
+          <span>Support & Helpdesk</span>
         </button>
         <button
           id="sidebar-signout-btn"
           onClick={() => {
-            if(confirm("Are you sure you want to sign out from ResortDesk AI?")) {
+            if(confirm("Are you sure you want to sign out from Mykonos Cottage ResortDesk?")) {
               alert("Signing out... (Demo reset)");
               window.location.reload();
             }
           }}
-          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-slate-500 hover:bg-rose-50 hover:text-rose-600 transition-all duration-200 group"
+          className="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-semibold text-slate-500 hover:bg-rose-50 hover:text-rose-600 transition-all duration-150 cursor-pointer"
         >
-          <LogOut className="w-[18px] h-[18px] text-slate-400 group-hover:text-rose-500" />
+          <LogOut className="w-4 h-4 text-slate-400" />
           <span>Sign Out</span>
         </button>
       </div>
     </div>
+  );
+
+  return (
+    <>
+      {/* 1. Desktop Static Sidebar (visible on lg and above) */}
+      <aside id="resort-sidebar-desktop" className="hidden lg:block h-screen shrink-0">
+        {sidebarContent}
+      </aside>
+
+      {/* 2. Mobile Drawer Sidebar (visible on mobile / tablet when opened) */}
+      {isMobileOpen && (
+        <div id="resort-sidebar-mobile-drawer" className="lg:hidden fixed inset-0 z-50 flex">
+          {/* Backdrop overlay */}
+          <div 
+            onClick={onCloseMobile}
+            className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-200"
+          />
+          {/* Drawer content */}
+          <div className="relative z-10 animate-in slide-in-from-left duration-250 shadow-2xl h-full">
+            {sidebarContent}
+          </div>
+        </div>
+      )}
+    </>
   );
 }

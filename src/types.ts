@@ -6,6 +6,11 @@ export interface Arrival {
   avatar: string;
   phone?: string;
   checkInTime?: string;
+  bookingStatus?: 'Confirmed' | 'Tentative' | 'Guaranteed';
+  paymentStatus?: 'Paid' | 'Pending' | 'Partial';
+  amountDue?: number;
+  nights?: number;
+  bookingId?: string;
 }
 
 export interface Departure {
@@ -16,6 +21,9 @@ export interface Departure {
   avatar: string;
   checkoutTime?: string;
   amountDue?: number;
+  bookingStatus?: 'Confirmed' | 'Completed';
+  paymentStatus?: 'Paid' | 'Due' | 'Unsettled';
+  bookingId?: string;
 }
 
 export interface HousekeepingChecklistItem {

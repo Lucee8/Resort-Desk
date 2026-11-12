@@ -103,7 +103,7 @@ export const initialGoogleIntegrationConfig: GoogleReviewsIntegrationConfig = {
     'https://www.googleapis.com/auth/userinfo.profile',
     'https://www.googleapis.com/auth/userinfo.email'
   ],
-  verifiedLocationAddress: 'Cliff Edge Highway, Ratnagiri Coast, Maharashtra / Goa Border, 415612',
+  verifiedLocationAddress: 'Tarkarli Beach Road, Malvan, Sindhudurg, Maharashtra 416606',
   averageGoogleRating: 4.9,
   totalGoogleReviews: 642
 };

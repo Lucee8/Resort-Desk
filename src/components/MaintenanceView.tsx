@@ -57,7 +57,7 @@ export default function MaintenanceView() {
   const [searchQuery, setSearchQuery] = useState('');
   const [activeFilter, setActiveFilter] = useState<string>('all');
   const [userRole, setUserRole] = useState<MaintenanceUserRole>('Manager');
-  const [selectedProperty, setSelectedProperty] = useState('Konkan Retreat (Main)');
+  const [selectedProperty, setSelectedProperty] = useState('Mykonos Cottage (Beachfront)');
 
   // Modals / Drawers state
   const [selectedTicket, setSelectedTicket] = useState<MaintenanceTicket | null>(null);

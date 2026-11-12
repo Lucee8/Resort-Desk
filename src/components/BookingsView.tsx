@@ -132,7 +132,7 @@ export default function BookingsView({
 
   // Handle WhatsApp action alert
   const handleSendWhatsApp = (name: string, phone: string) => {
-    alert(`Initiating automated WhatsApp message template to ${name} (${phone}): \n"Hi ${name}, welcome to Konkan Retreat! We look forward to hosting your stay in our ${selectedBooking?.roomType}."`);
+    alert(`Initiating automated WhatsApp message template to ${name} (${phone}): \n"Hi ${name}, welcome to Mykonos Cottage, Tarkarli! We look forward to hosting your stay in our ${selectedBooking?.roomType}."`);
   };
 
   return (
@@ -179,11 +179,11 @@ export default function BookingsView({
             <div className="flex justify-between items-start border-b border-slate-150 pb-8">
               <div className="flex items-center gap-3">
                 <div className="w-12 h-12 rounded-xl bg-teal-800 flex items-center justify-center text-white font-serif font-bold text-2xl shadow-md">
-                  K
+                  M
                 </div>
                 <div>
-                  <h2 className="text-xl font-bold font-serif text-teal-950">Konkan Retreat</h2>
-                  <p className="text-[10px] text-slate-400 font-semibold uppercase tracking-widest mt-0.5">Luxury Coastal Sanctuary</p>
+                  <h2 className="text-xl font-bold font-serif text-teal-950">Mykonos Cottage</h2>
+                  <p className="text-[10px] text-slate-400 font-semibold uppercase tracking-widest mt-0.5">Tarkarli, Malvan</p>
                 </div>
               </div>
               <div className="text-right">
@@ -275,7 +275,7 @@ export default function BookingsView({
 
             {/* Receipt Footer */}
             <div className="text-center mt-12 pt-8 border-t border-slate-100">
-              <p className="italic text-xs text-slate-400">Thank you for staying with Konkan Retreat!</p>
+              <p className="italic text-xs text-slate-400">Thank you for staying with Mykonos Cottage, Tarkarli!</p>
               <div className="flex justify-center gap-6 text-[10px] font-bold text-slate-400 mt-4 uppercase tracking-wider">
                 <span className="flex items-center gap-1">
                   <CheckCircle className="w-3.5 h-3.5 text-emerald-600" />

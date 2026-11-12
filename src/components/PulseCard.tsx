@@ -1,5 +1,5 @@
 import React from 'react';
-import { MapPin, Sun, Calendar, Navigation } from 'lucide-react';
+import { MapPin, Sun, Waves, Anchor, ExternalLink } from 'lucide-react';
 
 interface PulseCardProps {
   location: string;
@@ -12,51 +12,53 @@ export default function PulseCard({ location, weather, event, bannerImage }: Pul
   return (
     <div 
       id="pulse-card" 
-      className="relative rounded-3xl overflow-hidden shadow-lg h-[240px] font-sans group border border-slate-200/20"
+      className="relative rounded-2xl overflow-hidden shadow-xs border border-slate-200/60 bg-slate-900 text-white font-sans group min-h-[110px]"
     >
-      {/* Background Image with elegant overlay */}
+      {/* Background Image with subdued, elegant darkening overlay */}
       <img 
         src={bannerImage} 
-        alt="Resort Surroundings" 
-        className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
+        alt="Tarkarli Coastline" 
+        className="absolute inset-0 w-full h-full object-cover opacity-25 group-hover:scale-105 transition-transform duration-700"
       />
-      <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-900/60 to-transparent" />
+      <div className="absolute inset-0 bg-gradient-to-r from-slate-950 via-slate-900/90 to-teal-950/70" />
 
-      {/* Content layout on top of the gradient */}
-      <div className="absolute inset-0 p-6 flex flex-col justify-end text-white">
-        {/* Location Badge */}
-        <div className="flex items-center gap-1.5 bg-white/20 backdrop-blur-md w-fit px-3 py-1 rounded-full text-[10px] font-bold tracking-wide uppercase border border-white/25">
-          <MapPin className="w-3 h-3 text-amber-400" />
-          <span>{location}</span>
+      {/* Content layout: Compact horizontal strip */}
+      <div className="relative z-10 p-4 sm:p-5 flex flex-col md:flex-row md:items-center justify-between gap-3">
+        <div className="flex items-start gap-3">
+          <div className="w-9 h-9 rounded-xl bg-teal-800/80 border border-teal-700 text-teal-200 flex items-center justify-center shrink-0 mt-0.5">
+            <Anchor className="w-4 h-4 text-teal-300" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-[10px] uppercase font-bold tracking-widest text-teal-300 bg-teal-950/60 px-2 py-0.5 rounded-md border border-teal-800/60 flex items-center gap-1">
+                <MapPin className="w-2.5 h-2.5 text-amber-400" />
+                {location}
+              </span>
+              <span className="text-[10px] text-slate-300 font-medium">
+                Destination Pulse
+              </span>
+            </div>
+            <h4 className="text-sm font-bold text-white mt-1">
+              Coastal Tide & Watersports Operating Status
+            </h4>
+            <p className="text-[11px] text-slate-300 font-medium mt-0.5 leading-snug">
+              Sindhudurg Fort boat ferry operating normally • Low tide ideal for scuba diving & snorkeling at Tarkarli beach
+            </p>
+          </div>
         </div>
 
-        {/* Pulse Title */}
-        <h3 className="text-lg font-bold mt-3 font-serif tracking-wide text-white drop-shadow-sm">
-          Local Area Pulse
-        </h3>
-
-        {/* Weather & Event description */}
-        <div className="flex flex-col gap-1.5 mt-2">
-          <div className="flex items-center gap-2 text-xs text-slate-200 font-medium">
+        {/* Real-time Coastal Indicators */}
+        <div className="flex items-center gap-2 sm:gap-3 shrink-0 self-start md:self-center">
+          <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-white/10 backdrop-blur-xs border border-white/15 text-xs text-slate-200 font-medium">
             <Sun className="w-3.5 h-3.5 text-amber-300 shrink-0" />
-            <span>Today's weather: <strong className="text-white">{weather}</strong></span>
+            <span>{weather}</span>
           </div>
-          <div className="flex items-center gap-2 text-xs text-slate-200 font-medium">
-            <Calendar className="w-3.5 h-3.5 text-teal-300 shrink-0" />
-            <span>Event: <strong className="text-white">{event}</strong></span>
+          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-teal-800/50 backdrop-blur-xs border border-teal-600/30 text-xs text-teal-200 font-medium">
+            <Waves className="w-3.5 h-3.5 text-teal-300 shrink-0" />
+            <span className="text-white font-semibold">Calm Sea</span>
           </div>
         </div>
       </div>
-
-      {/* Tiny explore button top right */}
-      <button 
-        id="pulse-explore-btn"
-        onClick={() => alert(`Exploring sights in ${location}: \n- 2km from historic Bhatye Beach\n- 4km from Ratnadurg Fort\n- Mango farms local tours available at reception.`)}
-        className="absolute top-4 right-4 p-2 bg-white/10 hover:bg-white/25 backdrop-blur-md rounded-full border border-white/20 text-white transition-all cursor-pointer group/btn"
-        title="Explore area guide"
-      >
-        <Navigation className="w-3.5 h-3.5 group-hover/btn:translate-x-0.5 group-hover/btn:-translate-y-0.5 transition-transform" />
-      </button>
     </div>
   );
 }
