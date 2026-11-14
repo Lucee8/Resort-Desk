@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import BillingHeader from './BillingHeader';
 import BillingKPICards from './BillingKPICards';
 import RevenueBarChart from './RevenueBarChart';
@@ -36,9 +36,11 @@ import {
 
 interface BillingViewProps {
   triggerToast?: (message: string) => void;
+  initialStatusFilter?: string;
+  navigationKey?: number;
 }
 
-export default function BillingView({ triggerToast }: BillingViewProps) {
+export default function BillingView({ triggerToast, initialStatusFilter, navigationKey }: BillingViewProps) {
   // Safe toast helper
   const notify = (msg: string) => {
     if (triggerToast) {
@@ -54,7 +56,12 @@ export default function BillingView({ triggerToast }: BillingViewProps) {
   const [subscription, setSubscription] = useState<BillingSubscriptionUsage>(initialSubscriptionData);
   const [unbilledStays, setUnbilledStays] = useState<UnbilledStayItem[]>(initialUnbilledStays);
   const [bankSettlement, setBankSettlement] = useState<BankSettlementBatch>(initialBankSettlement);
-  const [statusFilter, setStatusFilter] = useState<string>('ALL');
+  const [statusFilter, setStatusFilter] = useState<string>(initialStatusFilter || 'ALL');
+
+  useEffect(() => {
+    if (navigationKey === undefined) return;
+    setStatusFilter(initialStatusFilter || 'ALL');
+  }, [navigationKey, initialStatusFilter]);
 
   // Modal controls
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);

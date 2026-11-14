@@ -270,8 +270,8 @@ export default function StaffPayrollTab({
                   <p className="text-[11px] text-slate-400 font-mono">ID: {selectedPayslipStaff.employeeId}</p>
                 </div>
                 <div className="text-right">
-                  <p className="font-bold text-slate-700">Vanya Boutique Resort</p>
-                  <p className="text-slate-400 text-[11px]">Konkan Coast, Maharashtra</p>
+                  <p className="font-bold text-slate-700">Mykonos Cottage</p>
+                  <p className="text-slate-400 text-[11px]">Tarkarli, Malvan, Maharashtra</p>
                   <p className="text-emerald-700 font-bold text-[11px]">Direct Bank Transfer</p>
                 </div>
               </div>

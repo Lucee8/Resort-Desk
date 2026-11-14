@@ -131,7 +131,7 @@ export default function RecognitionModal({
             {/* Elegant Certificate Card */}
             <div className="w-full bg-gradient-to-b from-amber-50 to-amber-100/50 p-6 rounded-2xl border-2 border-amber-300 shadow-sm flex flex-col items-center gap-2">
               <span className="text-[10px] font-black uppercase tracking-widest text-amber-800">
-                Vanya Boutique Resort • Certificate of Excellence
+                Mykonos Cottage, Tarkarli • Certificate of Excellence
               </span>
               <h3 className="text-xl font-black text-amber-950 mt-1">{awardType}</h3>
               <p className="text-xs text-slate-600">Proudly Presented To</p>

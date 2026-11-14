@@ -75,7 +75,8 @@ export default function ArrivalsCard({
           </div>
           <button 
             id="arrivals-viewall-btn"
-            onClick={() => onNavigateToBookings ? onNavigateToBookings() : alert("Opening Reservations roster")}
+            type="button"
+            onClick={() => onNavigateToBookings?.()}
             className="text-xs text-teal-800 hover:text-teal-950 font-bold flex items-center gap-1 cursor-pointer"
           >
             <span>View All</span>
@@ -149,11 +150,12 @@ export default function ArrivalsCard({
                     {/* View Booking details button */}
                     <button
                       type="button"
-                      title="View reservation details"
+                      title="View Booking"
                       onClick={() => onViewBooking ? onViewBooking(guest.guestName, guest.roomNumber) : onNavigateToBookings?.()}
-                      className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 transition-colors"
+                      className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-semibold text-slate-600 hover:text-teal-900 bg-white border border-slate-200/80 hover:border-teal-300 transition-colors cursor-pointer"
                     >
-                      <ExternalLink className="w-3.5 h-3.5" />
+                      <span>View</span>
+                      <ExternalLink className="w-3 h-3" />
                     </button>
 
                     {/* Status badge / interactive check-in trigger */}

@@ -27,48 +27,48 @@ export default function DashboardHeader({
   ];
 
   return (
-    <header id="dashboard-header" className="w-full flex items-center justify-between py-3.5 px-4 sm:px-6 lg:px-8 border-b border-slate-200/70 bg-white font-sans shrink-0">
+    <header id="dashboard-header" className="w-full flex items-center justify-between gap-2 py-3.5 px-3 sm:px-6 lg:px-8 border-b border-slate-200/70 bg-white font-sans shrink-0">
       {/* Left side: Hamburger on mobile + Greeting & Property Tag */}
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
         {onToggleMobileMenu && (
           <button
             id="mobile-menu-toggle-btn"
             type="button"
             onClick={onToggleMobileMenu}
-            className="lg:hidden p-2 rounded-xl text-slate-700 hover:bg-slate-100 border border-slate-200 focus:outline-none cursor-pointer"
+            className="lg:hidden p-2 rounded-xl text-slate-700 hover:bg-slate-100 border border-slate-200 focus:outline-none cursor-pointer shrink-0"
             title="Open navigation menu"
           >
             <Menu className="w-5 h-5" />
           </button>
         )}
 
-        <div>
+        <div className="min-w-0">
           <div className="flex items-center gap-2">
-            <h2 className="text-sm sm:text-base font-bold text-slate-900 tracking-tight leading-none">
+            <h2 className="text-sm sm:text-base font-bold text-slate-900 tracking-tight leading-none truncate">
               Mykonos Cottage
             </h2>
-            <span className="hidden sm:inline-flex items-center gap-1 text-[10px] text-teal-800 bg-teal-50 px-2 py-0.5 rounded-full font-bold border border-teal-100">
+            <span className="hidden sm:inline-flex items-center gap-1 text-[10px] text-teal-800 bg-teal-50 px-2 py-0.5 rounded-full font-bold border border-teal-100 shrink-0">
               <MapPin className="w-2.5 h-2.5 text-amber-600" />
               Tarkarli, Malvan
             </span>
           </div>
-          <p className="text-[10px] sm:text-[11px] font-semibold uppercase tracking-wider text-slate-400 mt-0.5">
-            Operations Management Console
+          <p className="text-[10px] sm:text-[11px] font-semibold uppercase tracking-wider text-slate-400 mt-0.5 truncate">
+            Operations Console
           </p>
         </div>
       </div>
 
       {/* Right side: Search & Utilities */}
-      <div className="flex items-center gap-3 sm:gap-4">
+      <div className="flex items-center gap-2 sm:gap-4 shrink-0">
         {/* Search Bar - Responsive width */}
-        <div className="relative w-36 sm:w-52 md:w-64">
-          <span className="absolute inset-y-0 left-3 flex items-center pointer-events-none text-slate-400">
+        <div className="relative w-28 sm:w-52 md:w-64">
+          <span className="absolute inset-y-0 left-2.5 sm:left-3 flex items-center pointer-events-none text-slate-400">
             <Search className="w-3.5 h-3.5" />
           </span>
           <input
             id="header-search-input"
             type="text"
-            placeholder="Search guests or rooms..."
+            placeholder="Search..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="w-full pl-8 sm:pl-9 pr-3 py-1.5 rounded-full border border-slate-200 bg-slate-50 text-xs text-slate-700 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-teal-700/20 focus:border-teal-700 transition-all"
@@ -84,7 +84,7 @@ export default function DashboardHeader({
         </div>
 
         {/* Action icons */}
-        <div className="flex items-center gap-1.5 sm:gap-2">
+        <div className="flex items-center gap-1 sm:gap-2">
           {/* Notifications */}
           <div className="relative">
             <button
@@ -101,7 +101,7 @@ export default function DashboardHeader({
 
             {/* Notifications Dropdown */}
             {showNotificationDropdown && (
-              <div id="notifications-dropdown" className="absolute right-0 mt-2 w-72 sm:w-80 bg-white rounded-2xl border border-slate-200/80 shadow-xl py-3 z-50 animate-in fade-in slide-in-from-top-3 duration-150">
+              <div id="notifications-dropdown" className="absolute right-0 mt-2 w-72 sm:w-80 max-w-[calc(100vw-2rem)] bg-white rounded-2xl border border-slate-200/80 shadow-xl py-3 z-50 animate-in fade-in slide-in-from-top-3 duration-150">
                 <div className="flex items-center justify-between px-4 pb-2 border-b border-slate-100">
                   <h4 className="text-xs font-bold text-slate-800">Operational Alerts</h4>
                   {notificationsCount > 0 && (

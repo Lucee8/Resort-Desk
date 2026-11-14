@@ -181,19 +181,19 @@ export default function ReviewsManagementView({
 
     if (target.sentiment === 'Negative' || target.rating <= 2) {
       if (tone === 'Empathetic Problem Solver') {
-        generatedText = `Dear ${target.reviewerName.split(' ')[0]}, Thank you for your candid feedback regarding your stay in ${target.roomOrBooking}. I am genuinely distressed to hear of the shortcomings you experienced. Delivering seamless 5-star hospitality is our sole priority, and we clearly fell short. Our senior management team has initiated immediate corrective actions across the property. I would consider it a privilege to personally manage your reservation on your next trip and arrange a complimentary stay enhancement. Please contact me directly at gm@malabarresort.com.`;
+        generatedText = `Dear ${target.reviewerName.split(' ')[0]}, Thank you for your candid feedback regarding your stay in ${target.roomOrBooking}. I am genuinely distressed to hear of the shortcomings you experienced. Delivering seamless hospitality is our sole priority, and we clearly fell short. Our senior management team has initiated immediate corrective actions across the property. I would consider it a privilege to personally manage your reservation on your next trip and arrange a complimentary stay enhancement. Please contact me directly at gm@mykonoscottage.in.`;
         perk = 'Complimentary Room Upgrade & Welcome High-Tea on Return';
       } else if (tone === 'Luxury Concierge') {
-        generatedText = `Dear ${target.reviewerName}, We hold ourselves to uncompromising standards of luxury, and we are sincerely saddened to learn that your stay did not reflect this promise. Please accept our personal apologies. We have addressed the matter with our department leads and would be honored to extend a curated VIP stay experience for your next coastal journey.`;
+        generatedText = `Dear ${target.reviewerName}, We hold ourselves to uncompromising standards of hospitality, and we are sincerely saddened to learn that your stay did not reflect this promise. Please accept our personal apologies. We have addressed the matter with our department leads and would be honored to extend a curated VIP stay experience for your next coastal journey.`;
         perk = 'Curated Beach Cabana Dinner & 25% Stay Voucher';
       } else {
         generatedText = `Dear ${target.reviewerName}, Thank you for bringing this to our attention. We take guest feedback very seriously and have taken prompt measures with our team. Please reach out to our management desk so we may make appropriate amends.`;
       }
     } else {
       if (tone === 'Luxury Concierge') {
-        generatedText = `Dear ${target.reviewerName}, It was our highest honor to welcome you to our coastal sanctuary at ${target.roomOrBooking}. We are enchanted to know that our staff, private pool, and dining experiences made your stay truly extraordinary. Our entire team looks forward to greeting you on your next visit to Goa & the Konkan coast.`;
+        generatedText = `Dear ${target.reviewerName}, It was our highest honor to welcome you to our coastal sanctuary at ${target.roomOrBooking}. We are enchanted to know that our staff, private pool, and dining experiences made your stay truly extraordinary. Our entire team looks forward to greeting you on your next visit to Mykonos Cottage, Tarkarli.`;
       } else if (tone === 'Executive & Crisp') {
-        generatedText = `Dear ${target.reviewerName}, Thank you for your 5-star review and for choosing The Malabar Grand Cliff Resort. We are delighted you enjoyed your time with us and hope to welcome you back soon.`;
+        generatedText = `Dear ${target.reviewerName}, Thank you for your 5-star review and for choosing Mykonos Cottage, Tarkarli. We are delighted you enjoyed your time with us and hope to welcome you back soon.`;
       } else {
         generatedText = `Dear ${target.reviewerName}, Thank you so much for your wonderful words! Our team is delighted that you enjoyed ${target.roomOrBooking} and our signature hospitality. It was our absolute pleasure to host you, and we cannot wait to welcome you back for another unforgettable escape!`;
       }

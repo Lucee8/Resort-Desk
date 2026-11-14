@@ -135,7 +135,7 @@ export default function MyraAIEngineSection({
           botResponse = `Yes, larger vehicles are available upon request. Our concierge will contact you.`;
         }
       } else if (lower.includes('breakfast') || lower.includes('dining') || lower.includes('food')) {
-        botResponse = `Complimentary buffet breakfast is served at The Palm Grove restaurant from 07:00 AM to 10:30 AM daily. We also offer 24/7 in-room dining featuring fresh coastal Goan specialties! 🍳🥞`;
+        botResponse = `Complimentary buffet breakfast is served at The Palm Grove restaurant from 07:00 AM to 10:30 AM daily. We also offer 24/7 in-room dining featuring fresh coastal Malvani specialties! 🍳🥞`;
         intent = 'dining_hours_inquiry';
         confidence = 98;
       } else if (lower.includes('late') || lower.includes('checkout')) {
@@ -148,7 +148,7 @@ export default function MyraAIEngineSection({
           : settings.tone === 'friendly' 
             ? 'Hey there! 😊 ' 
             : 'Hello! ';
-        botResponse = `${toneGreeting}Thank you for your question. As your AI Concierge at The Grand Oberoi Goa, I am always here to assist with dining reservations, spa bookings, and local recommendations. How else may I assist your stay?`;
+        botResponse = `${toneGreeting}Thank you for your question. As your AI Concierge at Mykonos Cottage, Tarkarli, I am always here to assist with dining reservations, spa bookings, and local recommendations. How else may I assist your stay?`;
         confidence = 90;
       }
 

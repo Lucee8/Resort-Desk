@@ -111,7 +111,7 @@ export default function ResortProfileSection({ profile, onChange, triggerToast }
                 value={profile.propertyName}
                 onChange={(e) => onChange({ propertyName: e.target.value })}
                 className="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-teal-700/20 focus:border-teal-700 transition-all font-medium"
-                placeholder="e.g. The Grand Oberoi Goa & Spa"
+                placeholder="e.g. Mykonos Cottage, Tarkarli"
               />
             </div>
 
@@ -124,7 +124,7 @@ export default function ResortProfileSection({ profile, onChange, triggerToast }
                 value={profile.legalEntityName}
                 onChange={(e) => onChange({ legalEntityName: e.target.value })}
                 className="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-teal-700/20 focus:border-teal-700 transition-all"
-                placeholder="e.g. Oberoi Leisure & Hospitality Private Limited"
+                placeholder="e.g. Mykonos Hospitality LLP, Tarkarli"
               />
             </div>
 
@@ -142,7 +142,7 @@ export default function ResortProfileSection({ profile, onChange, triggerToast }
                     value={profile.primaryEmail}
                     onChange={(e) => onChange({ primaryEmail: e.target.value })}
                     className="w-full pl-9 pr-3.5 py-2.5 border border-slate-200 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-teal-700/20 focus:border-teal-700 transition-all"
-                    placeholder="concierge@grandoberoigoa.com"
+                    placeholder="concierge@mykonoscottage.in"
                   />
                 </div>
               </div>
@@ -179,7 +179,7 @@ export default function ResortProfileSection({ profile, onChange, triggerToast }
                   value={profile.websiteUrl}
                   onChange={(e) => onChange({ websiteUrl: e.target.value })}
                   className="w-full pl-9 pr-3.5 py-2.5 border border-slate-200 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-teal-700/20 focus:border-teal-700 transition-all"
-                  placeholder="https://grandoberoigoa.com"
+                  placeholder="https://mykonoscottage.in"
                 />
               </div>
             </div>
@@ -204,7 +204,7 @@ export default function ResortProfileSection({ profile, onChange, triggerToast }
               value={profile.registeredAddress}
               onChange={(e) => onChange({ registeredAddress: e.target.value })}
               className="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-teal-700/20 focus:border-teal-700 transition-all"
-              placeholder="e.g. Aguada-Siolim Coastal Road, Candolim Beach"
+              placeholder="e.g. Tarkarli Beach Road, Malvan"
             />
           </div>
 
@@ -217,7 +217,7 @@ export default function ResortProfileSection({ profile, onChange, triggerToast }
               value={profile.city}
               onChange={(e) => onChange({ city: e.target.value })}
               className="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-teal-700/20 focus:border-teal-700 transition-all"
-              placeholder="North Goa"
+              placeholder="Tarkarli, Malvan"
             />
           </div>
 
@@ -230,7 +230,7 @@ export default function ResortProfileSection({ profile, onChange, triggerToast }
               value={profile.state}
               onChange={(e) => onChange({ state: e.target.value })}
               className="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-teal-700/20 focus:border-teal-700 transition-all"
-              placeholder="Goa"
+              placeholder="Maharashtra"
             />
           </div>
 

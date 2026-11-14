@@ -89,7 +89,7 @@ export const initialSentimentTopics: SentimentTopicMetric[] = [
 export const initialGoogleIntegrationConfig: GoogleReviewsIntegrationConfig = {
   isConnected: true,
   connectedAccount: 'samikshakoyande5@gmail.com',
-  businessName: 'The Malabar Grand Cliff Resort & Spa, Goa',
+  businessName: 'Mykonos Cottage, Tarkarli',
   locationId: 'locations/1089274829104829182',
   placeId: 'ChIJN1t_tDeuEmsRUsoyG83frY4',
   autoSyncEnabled: true,
@@ -292,7 +292,7 @@ export const initialReviewsList: ReviewItem[] = [
     status: 'Pending',
     aiSuggestedReply: {
       tone: 'Warm & Hospitable',
-      text: 'Dear Rajiv and Meera, Thank you for visiting us at The Malabar Grand Cliff Resort. We appreciate your honest observations regarding the breakfast timing rush and hot water plumbing in Suite 302. We have just added a second live dosa station to reduce peak morning wait times and our engineering team has flushed the solar heating line. We hope to welcome you back for a much smoother dining and stay experience soon.',
+      text: 'Dear Rajiv and Meera, Thank you for visiting us at Mykonos Cottage, Tarkarli. We appreciate your honest observations regarding the breakfast timing rush and hot water plumbing in Suite 302. We have just added a second live dosa station to reduce peak morning wait times and our engineering team has flushed the solar heating line. We hope to welcome you back for a much smoother dining and stay experience soon.',
       suggestedAt: '2 hours ago',
       confidence: 0.91,
       keyPointsCovered: ['Spice Garden dining improvements', 'Solar hot water line maintenance', 'Courteous appreciation']

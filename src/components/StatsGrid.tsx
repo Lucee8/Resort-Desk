@@ -7,18 +7,18 @@ interface StatsGridProps {
   totalRooms?: number;
   checkedInArrivals?: number;
   clearedDepartures?: number;
+  earliestPendingArrival?: string;
   onNavigateTab?: (tab: string) => void;
-  onAdjustStats?: () => void;
 }
 
-export default function StatsGrid({ 
-  stats, 
+export default function StatsGrid({
+  stats,
   totalRooms = 35,
   checkedInArrivals = 1,
-  clearedDepartures = 2,
-  onNavigateTab 
+  clearedDepartures = 1,
+  earliestPendingArrival,
+  onNavigateTab
 }: StatsGridProps) {
-  // Format numbers to Indian currency (INR)
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('en-IN', {
       style: 'currency',
@@ -28,20 +28,19 @@ export default function StatsGrid({
   };
 
   const occupiedRooms = Math.round((totalRooms * stats.occupancyRate) / 100);
-  const vacantRooms = totalRooms - occupiedRooms;
+  const vacantRooms = Math.max(0, totalRooms - occupiedRooms);
   const pendingArrivals = Math.max(0, stats.arrivalsTodayCount - checkedInArrivals);
   const pendingDepartures = Math.max(0, stats.departuresTodayCount - clearedDepartures);
 
   return (
     <div id="stats-grid" className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5 w-full font-sans">
       {/* 1. Today's Occupancy Card */}
-      <div 
+      <button
         id="stat-card-occupancy"
+        type="button"
         onClick={() => onNavigateTab?.('rooms')}
-        role="button"
-        tabIndex={0}
         title="Click to view Room Management & Category Inventory"
-        className="bg-white rounded-2xl border border-slate-200/70 p-5 shadow-xs hover:shadow-md hover:border-teal-700/40 hover:-translate-y-0.5 transition-all duration-200 relative overflow-hidden group cursor-pointer"
+        className="text-left bg-white rounded-2xl border border-slate-200/70 p-5 shadow-xs hover:shadow-md hover:border-teal-700/40 hover:-translate-y-0.5 transition-all duration-200 relative overflow-hidden group cursor-pointer"
       >
         <div className="flex justify-between items-start">
           <div className="p-2.5 bg-teal-50 text-teal-800 rounded-xl group-hover:bg-teal-800 group-hover:text-white transition-colors">
@@ -71,35 +70,33 @@ export default function StatsGrid({
             </span>
           </div>
 
-          {/* Supporting Room Breakdown Progress */}
           <div className="mt-2.5">
             <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
-              <div 
+              <div
                 className="bg-teal-700 h-full rounded-full transition-all duration-500"
                 style={{ width: `${stats.occupancyRate}%` }}
               />
             </div>
             <div className="flex justify-between items-center text-[10px] text-slate-400 mt-1.5 font-medium">
-              <span>{occupiedRooms} occupied cottages</span>
+              <span>{occupiedRooms} occupied</span>
               <span className="text-emerald-700 font-semibold">{vacantRooms} vacant</span>
             </div>
           </div>
         </div>
         <div className="absolute bottom-0 inset-x-0 h-1 bg-teal-700/10 group-hover:bg-teal-700 transition-colors" />
-      </div>
+      </button>
 
       {/* 2. Today's Revenue Card */}
-      <div 
+      <button
         id="stat-card-revenue"
+        type="button"
         onClick={() => onNavigateTab?.('billing')}
-        role="button"
-        tabIndex={0}
-        title="Click to view Financial Invoices & GST Ledgers"
-        className="bg-white rounded-2xl border border-slate-200/70 p-5 shadow-xs hover:shadow-md hover:border-amber-700/40 hover:-translate-y-0.5 transition-all duration-200 relative overflow-hidden group cursor-pointer"
+        title="Click to view Billing & GST Ledgers"
+        className="text-left bg-white rounded-2xl border border-slate-200/70 p-5 shadow-xs hover:shadow-md hover:border-amber-700/40 hover:-translate-y-0.5 transition-all duration-200 relative overflow-hidden group cursor-pointer"
       >
         <div className="flex justify-between items-start">
           <div className="p-2.5 bg-amber-50 text-amber-800 rounded-xl group-hover:bg-[#a64b2a] group-hover:text-white transition-colors">
-            <span className="font-serif font-bold text-base leading-none block w-5 h-5 flex items-center justify-center">₹</span>
+            <span className="font-serif font-bold text-base leading-none w-5 h-5 flex items-center justify-center">₹</span>
           </div>
           <div className="flex items-center gap-1.5">
             <span className="flex items-center gap-0.5 text-xs font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-100">
@@ -122,28 +119,26 @@ export default function StatsGrid({
             </h3>
           </div>
 
-          {/* Supporting Payment Outstanding Info */}
           <div className="mt-2.5">
             <div className="flex items-center justify-between text-[10px] bg-amber-50/70 px-2 py-1 rounded-lg border border-amber-100/70 text-amber-900 font-medium">
               <span>Pending Folios:</span>
               <span className="font-bold text-amber-950">{formatCurrency(stats.pendingPaymentsAmount)}</span>
             </div>
             <p className="text-[10px] text-slate-400 mt-1 font-medium text-right">
-              Click to view billing ledger
+              Open billing ledger
             </p>
           </div>
         </div>
         <div className="absolute bottom-0 inset-x-0 h-1 bg-[#a64b2a]/10 group-hover:bg-[#a64b2a] transition-colors" />
-      </div>
+      </button>
 
-      {/* 3. Arrivals Today Card */}
-      <div 
+      {/* 3. Today's Arrivals Card */}
+      <button
         id="stat-card-arrivals"
+        type="button"
         onClick={() => onNavigateTab?.('bookings')}
-        role="button"
-        tabIndex={0}
-        title="Click to view Bookings & Guest Check-in desk"
-        className="bg-white rounded-2xl border border-slate-200/70 p-5 shadow-xs hover:shadow-md hover:border-emerald-700/40 hover:-translate-y-0.5 transition-all duration-200 relative overflow-hidden group cursor-pointer"
+        title="Click to view Bookings & Check-in Schedule"
+        className="text-left bg-white rounded-2xl border border-slate-200/70 p-5 shadow-xs hover:shadow-md hover:border-emerald-700/40 hover:-translate-y-0.5 transition-all duration-200 relative overflow-hidden group cursor-pointer"
       >
         <div className="flex justify-between items-start">
           <div className="p-2.5 bg-emerald-50 text-emerald-800 rounded-xl group-hover:bg-emerald-800 group-hover:text-white transition-colors">
@@ -168,32 +163,30 @@ export default function StatsGrid({
               {stats.arrivalsTodayCount}
             </h3>
             <span className="text-xs font-semibold text-slate-500">
-              guest arrivals
+              scheduled
             </span>
           </div>
 
-          {/* Supporting Check-in Breakdown */}
           <div className="mt-2.5">
             <div className="flex items-center justify-between text-[10px] bg-slate-50 px-2 py-1 rounded-lg border border-slate-100 font-medium">
-              <span className="text-slate-500">Remaining Today:</span>
-              <span className="font-bold text-teal-800">{pendingArrivals} pending arrival</span>
+              <span className="text-slate-500">Outstanding Check-ins:</span>
+              <span className="font-bold text-teal-800">{pendingArrivals} pending</span>
             </div>
             <p className="text-[10px] text-slate-400 mt-1 font-medium text-right">
-              Earliest arrival: 01:30 PM
+              {earliestPendingArrival ? `Next ETA: ${earliestPendingArrival}` : 'All arrivals checked in'}
             </p>
           </div>
         </div>
         <div className="absolute bottom-0 inset-x-0 h-1 bg-emerald-600/10 group-hover:bg-emerald-600 transition-colors" />
-      </div>
+      </button>
 
-      {/* 4. Departures Today Card */}
-      <div 
+      {/* 4. Today's Departures Card */}
+      <button
         id="stat-card-departures"
+        type="button"
         onClick={() => onNavigateTab?.('bookings')}
-        role="button"
-        tabIndex={0}
-        title="Click to view Bookings & Guest Check-outs"
-        className="bg-white rounded-2xl border border-slate-200/70 p-5 shadow-xs hover:shadow-md hover:border-rose-700/40 hover:-translate-y-0.5 transition-all duration-200 relative overflow-hidden group cursor-pointer"
+        title="Click to view Bookings & Check-outs"
+        className="text-left bg-white rounded-2xl border border-slate-200/70 p-5 shadow-xs hover:shadow-md hover:border-rose-700/40 hover:-translate-y-0.5 transition-all duration-200 relative overflow-hidden group cursor-pointer"
       >
         <div className="flex justify-between items-start">
           <div className="p-2.5 bg-rose-50 text-rose-800 rounded-xl group-hover:bg-rose-800 group-hover:text-white transition-colors">
@@ -218,11 +211,10 @@ export default function StatsGrid({
               {stats.departuresTodayCount}
             </h3>
             <span className="text-xs font-semibold text-slate-500">
-              guest departures
+              scheduled
             </span>
           </div>
 
-          {/* Supporting Departure Breakdown */}
           <div className="mt-2.5">
             <div className="flex items-center justify-between text-[10px] bg-slate-50 px-2 py-1 rounded-lg border border-slate-100 font-medium">
               <span className="text-slate-500">Pending Checkout:</span>
@@ -234,7 +226,7 @@ export default function StatsGrid({
           </div>
         </div>
         <div className="absolute bottom-0 inset-x-0 h-1 bg-rose-600/10 group-hover:bg-rose-600 transition-colors" />
-      </div>
+      </button>
     </div>
   );
 }

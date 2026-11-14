@@ -472,7 +472,7 @@ export default function StaffRolesSection({
                 <input
                   type="email"
                   required
-                  placeholder="e.g. rohini.d@grandoberoigoa.com"
+                  placeholder="e.g. rohini.d@mykonoscottage.in"
                   value={inviteEmail}
                   onChange={(e) => setInviteEmail(e.target.value)}
                   className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-teal-800"

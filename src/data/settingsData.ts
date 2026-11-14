@@ -312,7 +312,7 @@ export const initialStaffSessions: StaffSession[] = [
     device: 'MacBook Pro 16" (macOS 15.3)',
     browser: 'Chrome 128.0',
     ipAddress: '49.36.128.45',
-    location: 'Panaji, Goa, India',
+    location: 'Malvan, Maharashtra, India',
     loginTime: 'Active now',
     isCurrent: true
   },
@@ -323,7 +323,7 @@ export const initialStaffSessions: StaffSession[] = [
     device: 'Dell OptiPlex 7090 (Windows 11)',
     browser: 'Edge 127.0',
     ipAddress: '103.87.52.12',
-    location: 'Candolim, Goa, India',
+    location: 'Tarkarli, Malvan, India',
     loginTime: '28 mins ago',
     isCurrent: false
   },
@@ -334,7 +334,7 @@ export const initialStaffSessions: StaffSession[] = [
     device: 'Samsung Galaxy Tab S9 (Android 14)',
     browser: 'Chrome Mobile',
     ipAddress: '103.87.52.19',
-    location: 'Candolim, Goa, India',
+    location: 'Tarkarli, Malvan, India',
     loginTime: '2 hours ago',
     isCurrent: false
   },
@@ -345,7 +345,7 @@ export const initialStaffSessions: StaffSession[] = [
     device: 'iPhone 15 Pro (iOS 18)',
     browser: 'Safari Mobile',
     ipAddress: '49.36.130.88',
-    location: 'Margao, Goa, India',
+    location: 'Sindhudurg, Maharashtra, India',
     loginTime: '4 hours ago',
     isCurrent: false
   }
@@ -359,7 +359,7 @@ export const initialLoginHistory: LoginHistoryItem[] = [
     ipAddress: '49.36.128.45',
     timestamp: 'Today, 08:30 AM',
     status: 'Success',
-    location: 'Panaji, Goa'
+    location: 'Malvan, Maharashtra'
   },
   {
     id: 'log-102',
@@ -368,7 +368,7 @@ export const initialLoginHistory: LoginHistoryItem[] = [
     ipAddress: '103.87.52.12',
     timestamp: 'Today, 07:15 AM',
     status: 'Success',
-    location: 'Candolim, Goa'
+    location: 'Tarkarli, Malvan'
   },
   {
     id: 'log-103',
@@ -386,7 +386,7 @@ export const initialLoginHistory: LoginHistoryItem[] = [
     ipAddress: '103.87.52.19',
     timestamp: 'Yesterday, 06:45 AM',
     status: 'Success',
-    location: 'Candolim, Goa'
+    location: 'Tarkarli, Malvan'
   }
 ];
 
@@ -400,7 +400,7 @@ export const initialMyraAISettings: MyraAISettings = {
   humanEscalation: true,
   confidenceThreshold: 75,
   tone: 'warm',
-  greetingPrefix: 'Namaste! Welcome to The Grand Oberoi Goa. I am Myra, your AI Concierge.',
+  greetingPrefix: 'Namaste! Welcome to Mykonos Cottage, Tarkarli. I am Myra, your AI Concierge.',
   signatureText: '— Myra, ResortDesk AI Concierge 🌺',
   supportedLanguages: ['English', 'Hindi', 'Marathi', 'Konkani', 'Russian'],
   autoAssignRoom: true,
@@ -416,8 +416,8 @@ export const initialKnowledgeBase: KnowledgeBaseItem[] = [
   {
     id: 'kb-1',
     category: 'Transport',
-    question: 'Do you provide airport pickup and drop-off from Goa Mopa (GOX) or Dabolim (GOI)?',
-    answer: 'Yes, we provide private chauffeur airport transfers. A luxury sedan is ₹2,500 + 18% GST from Manohar International Airport (Mopa GOX - approx 45 mins) and ₹2,200 + 18% GST from Dabolim (GOI - approx 55 mins). Large luxury Innova Crysta is ₹3,500 + GST.',
+    question: 'Do you provide airport pickup and drop-off from Sindhudurg (SDW) or Goa Mopa (GOX)?',
+    answer: 'Yes, we provide private chauffeur airport transfers. A sedan is ₹2,200 + 18% GST from Sindhudurg Airport (Chipi SDW - approx 35 mins) and ₹3,500 + 18% GST from Goa Mopa (GOX - approx 90 mins).',
     lastUpdated: '2 days ago',
     isPublished: true
   },
@@ -477,7 +477,7 @@ export const initialIntegrations: IntegrationItem[] = [
     accountIdentifier: 'Hotel ID: 894210',
     configFields: [
       { key: 'hotelId', label: 'Booking.com Property ID', type: 'text', value: '894210' },
-      { key: 'username', label: 'Channel XML Username', type: 'text', value: 'oberoi_channel_goa' },
+      { key: 'username', label: 'Channel XML Username', type: 'text', value: 'mykonos_tarkarli_channel' },
       { key: 'syncFreq', label: 'Sync Frequency', type: 'select', value: 'Real-time Webhook', options: ['Real-time Webhook', 'Every 5 Minutes', 'Every 15 Minutes'] }
     ]
   },
@@ -539,7 +539,7 @@ export const initialIntegrations: IntegrationItem[] = [
     lastSync: 'Never',
     accountIdentifier: 'Port: 9000',
     configFields: [
-      { key: 'companyName', label: 'Tally Company Name', type: 'text', value: 'THE GRAND OBEROI GOA 2026-27' },
+      { key: 'companyName', label: 'Tally Company Name', type: 'text', value: 'MYKONOS COTTAGE TARKARLI 2026-27' },
       { key: 'tallyHost', label: 'Tally XML / Server URL', type: 'text', value: 'http://192.168.1.100:9000' }
     ]
   },
@@ -554,7 +554,7 @@ export const initialIntegrations: IntegrationItem[] = [
     lastSync: '12 mins ago',
     accountIdentifier: 'resortdesk-sync@google.com',
     configFields: [
-      { key: 'calId', label: 'Primary Calendar ID', type: 'text', value: 'concierge@grandoberoigoa.com' }
+      { key: 'calId', label: 'Primary Calendar ID', type: 'text', value: 'concierge@mykonoscottage.in' }
     ]
   },
   {
@@ -566,9 +566,9 @@ export const initialIntegrations: IntegrationItem[] = [
     status: 'Connected',
     statusText: 'Connected & Streaming rows',
     lastSync: '1 min ago',
-    accountIdentifier: 'ResortDesk_Goa_Master_2026',
+    accountIdentifier: 'ResortDesk_Mykonos_Master_2026',
     configFields: [
-      { key: 'sheetUrl', label: 'Google Spreadsheet URL', type: 'text', value: 'https://docs.google.com/spreadsheets/d/1BxiMVs0XRA5nFMdKvBdBZj_goa' }
+      { key: 'sheetUrl', label: 'Google Spreadsheet URL', type: 'text', value: 'https://docs.google.com/spreadsheets/d/1BxiMVs0XRA5nFMdKvBdBZj_mykonos' }
     ]
   },
   {
@@ -603,10 +603,10 @@ export const initialIntegrations: IntegrationItem[] = [
 ];
 
 export const initialBillingGSTSettings: BillingGSTSettings = {
-  gstin: '30AABCO4921B1Z2',
-  legalBusinessName: 'Oberoi Leisure & Hospitality Private Limited',
-  stateCode: '30 (Goa)',
-  invoicePrefix: 'OGOA-2026/',
+  gstin: '27AABCM4921B1Z2',
+  legalBusinessName: 'Mykonos Hospitality LLP, Tarkarli',
+  stateCode: '27 (Maharashtra)',
+  invoicePrefix: 'MYK-2026/',
   nextInvoiceNumber: 1042,
   fySequence: '2026-27',
   defaultGstRate: 18,
@@ -711,13 +711,13 @@ export const initialNotificationRules: NotificationRuleItem[] = [
 export const initialWhatsAppConfig: WhatsAppSettingsConfig = {
   phoneNumber: '+91 98765 43210',
   wabaId: 'WABA_1092837491029',
-  displayName: 'The Grand Oberoi Goa AI Desk',
+  displayName: 'Mykonos Cottage Tarkarli AI Desk',
   status: 'Verified & Active',
   autoBotReplies: true,
   humanHandoffKeywords: 'human, manager, reception, complaint, emergency, talk to person',
   businessHoursStart: '06:00',
   businessHoursEnd: '23:30',
-  outOfHoursMessage: 'Thank you for contacting The Grand Oberoi Goa. Our human concierge desk is resting, but Myra AI is online 24/7 to assist with bookings, airport pickups, and dining orders.',
+  outOfHoursMessage: 'Thank you for contacting Mykonos Cottage, Tarkarli. Our human concierge desk is resting, but Myra AI is online 24/7 to assist with bookings, transfers, and dining orders.',
   templates: [
     {
       id: 'tmpl-1',
@@ -725,7 +725,7 @@ export const initialWhatsAppConfig: WhatsAppSettingsConfig = {
       category: 'UTILITY',
       language: 'en_US',
       status: 'APPROVED',
-      bodyText: 'Dear {{1}}, your reservation at The Grand Oberoi Goa is confirmed! Booking ID: {{2}}. Check-in: {{3}} at 2:00 PM. Tap below for your digital check-in pass.',
+      bodyText: 'Dear {{1}}, your reservation at Mykonos Cottage, Tarkarli is confirmed! Booking ID: {{2}}. Check-in: {{3}} at 2:00 PM. Tap below for your digital check-in pass.',
       lastUpdated: 'Aug 12, 2026'
     },
     {
@@ -734,7 +734,7 @@ export const initialWhatsAppConfig: WhatsAppSettingsConfig = {
       category: 'UTILITY',
       language: 'en_US',
       status: 'APPROVED',
-      bodyText: 'Namaste {{1}}! We look forward to welcoming you tomorrow. Would you like to schedule an airport pickup from GOX/GOI or reserve a table at Coastal Spice?',
+      bodyText: 'Namaste {{1}}! We look forward to welcoming you tomorrow. Would you like to schedule a transfer from Sindhudurg Airport or reserve a table at Coastal Spice?',
       lastUpdated: 'Aug 04, 2026'
     },
     {
@@ -752,7 +752,7 @@ export const initialWhatsAppConfig: WhatsAppSettingsConfig = {
       category: 'MARKETING',
       language: 'en_US',
       status: 'APPROVED',
-      bodyText: 'Hi {{1}}, we hope you enjoyed your stay at The Grand Oberoi Goa! Could you take 30 seconds to share your experience on Google? It means the world to our team: {{2}}',
+      bodyText: 'Hi {{1}}, we hope you enjoyed your stay at Mykonos Cottage, Tarkarli! Could you take 30 seconds to share your experience on Google? It means the world to our team: {{2}}',
       lastUpdated: 'Jul 15, 2026'
     }
   ]
@@ -907,7 +907,7 @@ export const initialAPIKeys: APIKeyItem[] = [
 export const initialWebhooks: WebhookItem[] = [
   {
     id: 'wh-1',
-    url: 'https://hooks.zapier.com/hooks/catch/948291/oberoi_booking',
+    url: 'https://hooks.zapier.com/hooks/catch/948291/mykonos_booking',
     events: ['booking.created', 'booking.cancelled', 'payment.success'],
     status: 'Active',
     secretMasked: 'whsec_9842****************',
@@ -916,7 +916,7 @@ export const initialWebhooks: WebhookItem[] = [
   },
   {
     id: 'wh-2',
-    url: 'https://api.grandoberoigoa.com/webhooks/myra-escalation',
+    url: 'https://api.mykonoscottage.in/webhooks/myra-escalation',
     events: ['myra.human_escalation', 'review.negative_alert'],
     status: 'Active',
     secretMasked: 'whsec_3810****************',
@@ -970,7 +970,7 @@ export const initialAppearance: AppearanceSettings = {
   theme: 'light',
   accentColor: 'emerald',
   density: 'comfortable',
-  customBrandingName: 'The Grand Oberoi Goa',
+  customBrandingName: 'Mykonos Cottage, Tarkarli',
   highContrastMode: false
 };
 
@@ -978,31 +978,31 @@ export const initialEmergencyContacts: EmergencyContactItem[] = [
   {
     id: 'em-1',
     type: 'Police',
-    name: 'Candolim Police Station',
-    organization: 'Goa State Police Department',
-    phone: '+91 832 248 9257',
+    name: 'Malvan Police Station',
+    organization: 'Maharashtra State Police (Sindhudurg)',
+    phone: '+91 2365 252 100',
     alternatePhone: '100 / 112 (Emergency Control)',
-    address: 'Near Fort Aguada Road, Candolim, Goa 403515',
+    address: 'Bazar Peth Road, Malvan, Sindhudurg 416606',
     isPrimary: true
   },
   {
     id: 'em-2',
     type: 'Fire',
-    name: 'Pilerne Fire & Rescue Sub-Station',
-    organization: 'Directorate of Fire & Emergency Services Goa',
-    phone: '+91 832 240 7101',
+    name: 'Malvan Municipal Fire & Rescue',
+    organization: 'Sindhudurg Fire & Emergency Services',
+    phone: '+91 2365 252 201',
     alternatePhone: '101',
-    address: 'Pilerne Industrial Estate, Goa',
+    address: 'Malvan Nagar Parishad, Sindhudurg',
     isPrimary: true
   },
   {
     id: 'em-3',
     type: 'Hospital',
-    name: 'Manipal Hospital Goa (24/7 Emergency)',
-    organization: 'Manipal Health Enterprises',
-    phone: '+91 832 663 3333',
+    name: 'Malvan Rural Sub-District Hospital (24/7)',
+    organization: 'Sindhudurg District Health Services',
+    phone: '+91 2365 252 333',
     alternatePhone: '108 (National Ambulance)',
-    address: 'Dr. E Borges Road, Dona Paula, Panaji, Goa 403004',
+    address: 'Hospital Road, Malvan, Maharashtra 416606',
     isPrimary: true
   },
   {
@@ -1011,14 +1011,14 @@ export const initialEmergencyContacts: EmergencyContactItem[] = [
     name: 'Dr. Suresh Kamat, MD',
     organization: 'Resort Designated On-Call Physician',
     phone: '+91 98221 44556',
-    address: 'Consulting Clinic, Calangute, Goa',
+    address: 'Tarkarli Road Clinic, Malvan',
     isPrimary: false
   },
   {
     id: 'em-5',
     type: 'Security',
     name: 'Col. Ranjit Varma (Retd.)',
-    organization: 'Chief Security Officer — Grand Oberoi',
+    organization: 'Chief Security Officer — Mykonos Cottage',
     phone: '+91 98765 00001',
     address: 'Internal Security Operations Command, Ext 901',
     isPrimary: true

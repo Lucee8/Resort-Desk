@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Plus, 
   BarChart3, 
@@ -47,7 +47,12 @@ import ScheduleVendorModal from './maintenance/ScheduleVendorModal';
 import NotificationsDropdown from './maintenance/NotificationsDropdown';
 import StaffRadioDrawer from './maintenance/StaffRadioDrawer';
 
-export default function MaintenanceView() {
+interface MaintenanceViewProps {
+  initialFilter?: 'all' | 'high_priority' | 'unassigned' | 'completed';
+  navigationKey?: number;
+}
+
+export default function MaintenanceView({ initialFilter, navigationKey }: MaintenanceViewProps = {}) {
   // State
   const [tickets, setTickets] = useState<MaintenanceTicket[]>(initialMaintenanceTickets);
   const [technicians, setTechnicians] = useState<Technician[]>(initialTechnicians);
@@ -55,9 +60,15 @@ export default function MaintenanceView() {
   const [recentlyResolved, setRecentlyResolved] = useState<RecentlyResolvedMaintenance[]>(initialRecentlyResolved);
   
   const [searchQuery, setSearchQuery] = useState('');
-  const [activeFilter, setActiveFilter] = useState<string>('all');
+  const [activeFilter, setActiveFilter] = useState<string>(initialFilter || 'all');
   const [userRole, setUserRole] = useState<MaintenanceUserRole>('Manager');
   const [selectedProperty, setSelectedProperty] = useState('Mykonos Cottage (Beachfront)');
+
+  useEffect(() => {
+    if (navigationKey === undefined) return;
+    setActiveFilter(initialFilter || 'all');
+    setSearchQuery('');
+  }, [navigationKey, initialFilter]);
 
   // Modals / Drawers state
   const [selectedTicket, setSelectedTicket] = useState<MaintenanceTicket | null>(null);
@@ -340,9 +351,8 @@ export default function MaintenanceView() {
           completedThisWeekCount={completedThisWeekCount}
           efficiencyRate={efficiencyRate}
           onFilterClick={(type) => {
-            if (type === 'high_priority') setSearchQuery('Emergency');
-            else if (type === 'unassigned') setSearchQuery('Unassigned');
-            else setSearchQuery('');
+            setActiveFilter(type);
+            setSearchQuery('');
           }}
           activeFilter={activeFilter}
         />
@@ -355,7 +365,15 @@ export default function MaintenanceView() {
             
             {/* Current Maintenance Tickets Table */}
             <TicketsTable
-              tickets={tickets}
+              tickets={
+                activeFilter === 'high_priority'
+                  ? tickets.filter(t => (t.priority === 'Emergency' || t.priority === 'High') && t.status !== 'Closed')
+                  : activeFilter === 'unassigned'
+                    ? tickets.filter(t => !t.assignedTechnicianName && t.status !== 'Closed')
+                    : activeFilter === 'completed'
+                      ? tickets.filter(t => t.status === 'Resolved' || t.status === 'Closed')
+                      : tickets
+              }
               technicians={technicians}
               onOpenTicketDetails={handleOpenTicket}
               onOpenRegisterModal={() => setIsRegisterModalOpen(true)}

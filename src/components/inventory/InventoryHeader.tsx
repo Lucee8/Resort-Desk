@@ -67,7 +67,7 @@ export default function InventoryHeader({
       <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 pb-2">
         <div className="flex items-center gap-3">
           <span className="text-xl font-bold text-slate-800 tracking-tight">
-            Konkan PMS
+            Mykonos PMS
           </span>
           <span className="hidden sm:inline-block px-2.5 py-0.5 bg-teal-50 text-teal-800 text-[11px] font-semibold rounded-full border border-teal-200">
             Supplies & Stock v2.0
@@ -176,7 +176,7 @@ export default function InventoryHeader({
                   {userRole}
                 </span>
                 <span className="text-[10px] text-slate-400 block leading-tight">
-                  Konkan Staff
+                  Mykonos Staff
                 </span>
               </div>
               <ChevronDown className="w-3.5 h-3.5 text-slate-400" />

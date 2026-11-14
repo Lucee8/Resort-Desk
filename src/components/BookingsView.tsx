@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { 
   Sparkles, 
   Plus, 
@@ -29,13 +29,19 @@ interface BookingsViewProps {
   onAddBooking: (booking: Booking) => void;
   onUpdateBooking: (booking: Booking) => void;
   onOpenBookingModal: () => void;
+  initialStatusFilter?: string;
+  initialSearchQuery?: string;
+  navigationKey?: number;
 }
 
 export default function BookingsView({ 
   bookings, 
   onAddBooking, 
   onUpdateBooking,
-  onOpenBookingModal 
+  onOpenBookingModal,
+  initialStatusFilter,
+  initialSearchQuery,
+  navigationKey
 }: BookingsViewProps) {
   
   // Selected booking for Right Sidebar Details / Drawer
@@ -45,8 +51,28 @@ export default function BookingsView({
 
   // Filters state
   const [roomFilter, setRoomFilter] = useState<string>('All');
-  const [statusFilter, setStatusFilter] = useState<string>('All');
-  const [searchQuery, setSearchQuery] = useState<string>('');
+  const [statusFilter, setStatusFilter] = useState<string>(initialStatusFilter || 'All');
+  const [searchQuery, setSearchQuery] = useState<string>(initialSearchQuery || '');
+
+  useEffect(() => {
+    if (navigationKey === undefined) return;
+    setRoomFilter('All');
+    setStatusFilter(initialStatusFilter || 'All');
+    setSearchQuery(initialSearchQuery || '');
+    setViewingFullProfileId(null);
+    setViewingInvoiceId(null);
+
+    if (initialSearchQuery) {
+      const q = initialSearchQuery.toLowerCase();
+      const match = bookings.find(b =>
+        b.guestName.toLowerCase().includes(q) || b.roomNumber.toLowerCase().includes(q)
+      );
+      if (match) setSelectedBookingId(match.id);
+    } else if (initialStatusFilter && initialStatusFilter !== 'All') {
+      const match = bookings.find(b => b.bookingStatus === initialStatusFilter);
+      if (match) setSelectedBookingId(match.id);
+    }
+  }, [navigationKey, initialStatusFilter, initialSearchQuery, bookings]);
 
   // Internal notes writing state
   const [newNoteText, setNewNoteText] = useState<string>('');
@@ -287,7 +313,7 @@ export default function BookingsView({
                 </span>
               </div>
               <p className="text-[9px] text-slate-400 mt-6 max-w-md mx-auto leading-normal">
-                This is a computer-generated invoice and does not require a physical signature. Taxes are calculated as per the prevailing GST laws in India. For any billing queries, contact hello@konkanretreat.com
+                This is a computer-generated invoice and does not require a physical signature. Taxes are calculated as per the prevailing GST laws in India. For any billing queries, contact hello@mykonoscottage.in
               </p>
             </div>
 

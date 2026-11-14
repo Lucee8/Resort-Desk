@@ -15,6 +15,7 @@ interface DeparturesCardProps {
   departures: Departure[];
   onCheckOut: (id: string) => void;
   onReviewBilling?: (guestName: string, amount: number) => void;
+  onViewBooking?: (guestName: string, roomNumber: string) => void;
   onNavigateToBookings?: () => void;
 }
 
@@ -22,6 +23,7 @@ export default function DeparturesCard({
   departures, 
   onCheckOut, 
   onReviewBilling,
+  onViewBooking,
   onNavigateToBookings 
 }: DeparturesCardProps) {
   const [showHistory, setShowHistory] = useState(false);
@@ -47,7 +49,8 @@ export default function DeparturesCard({
           </div>
           <button 
             id="departures-viewall-btn"
-            onClick={() => onNavigateToBookings ? onNavigateToBookings() : alert(`Departures status: ${checkedOutCount} cleared, ${pendingCount} pending checkout.`)}
+            type="button"
+            onClick={() => onNavigateToBookings?.()}
             className="text-xs text-teal-800 hover:text-teal-950 font-bold flex items-center gap-1 cursor-pointer"
           >
             <span>View All</span>
@@ -130,6 +133,17 @@ export default function DeparturesCard({
 
                   {/* Actions Area */}
                   <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
+                    {/* View Booking details button */}
+                    <button
+                      type="button"
+                      title="View Booking"
+                      onClick={() => onViewBooking ? onViewBooking(guest.guestName, guest.roomNumber) : onNavigateToBookings?.()}
+                      className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-semibold text-slate-600 hover:text-teal-900 bg-white border border-slate-200/80 hover:border-teal-300 transition-colors cursor-pointer"
+                    >
+                      <span>View</span>
+                      <ExternalLink className="w-3 h-3" />
+                    </button>
+
                     {/* Review Folio button when due */}
                     {hasDue && !isCheckedOut && onReviewBilling && (
                       <button

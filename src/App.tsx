@@ -18,6 +18,7 @@ import {
 import Sidebar from './components/Sidebar';
 import DashboardHeader from './components/DashboardHeader';
 import StatsGrid from './components/StatsGrid';
+import TodayOperationsSection, { OperationsNavigationOptions } from './components/TodayOperationsSection';
 import ArrivalsCard from './components/ArrivalsCard';
 import DeparturesCard from './components/DeparturesCard';
 import OccupancyChart from './components/OccupancyChart';
@@ -54,8 +55,16 @@ import {
 import { Arrival, Departure, HousekeepingTask, MaintenanceAlert, Booking, RoomCategory, PropertyAmenity, RoomMaintenanceStatus, GuestCRM } from './types';
 
 export default function App() {
-  // Navigation tabs state
+  // Navigation & mobile drawer state
   const [activeTab, setActiveTab] = useState<string>('dashboard');
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState<boolean>(false);
+
+  // Deep navigation filter states
+  const [navFilterKey, setNavFilterKey] = useState<number>(0);
+  const [bookingsNavFilter, setBookingsNavFilter] = useState<{ status?: string; search?: string }>({});
+  const [housekeepingNavFilter, setHousekeepingNavFilter] = useState<'All' | 'Urgent' | 'Unassigned' | 'Assigned'>('All');
+  const [maintenanceNavFilter, setMaintenanceNavFilter] = useState<'all' | 'high_priority' | 'unassigned' | 'completed'>('all');
+  const [billingNavFilter, setBillingNavFilter] = useState<string>('ALL');
 
   // Search query state
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -114,7 +123,7 @@ export default function App() {
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   // Selected billing detail for modal
-  const [billingDetail, setBillingDetail] = useState<{ name: string; amount: number } | null>(null);
+  const [billingDetail, setBillingDetail] = useState<{ name: string; amount: number; roomNumber?: string } | null>(null);
 
   // Notifications count state
   const [notificationsCount, setNotificationsCount] = useState(2);
@@ -132,10 +141,78 @@ export default function App() {
     }, 4000);
   };
 
-  // Housekeeping remaining count for badge
+  // Navigate to module with optional pre-applied filter/search
+  const navigateToModule = (tab: string, options?: OperationsNavigationOptions) => {
+    if (tab === 'bookings') {
+      setBookingsNavFilter({
+        status: options?.bookingsStatus || 'All',
+        search: options?.bookingsSearch || ''
+      });
+    } else if (tab === 'housekeeping') {
+      setHousekeepingNavFilter(options?.housekeepingFilter || 'All');
+    } else if (tab === 'maintenance') {
+      setMaintenanceNavFilter(options?.maintenanceFilter || 'all');
+    } else if (tab === 'billing') {
+      setBillingNavFilter(options?.billingFilter || 'ALL');
+    }
+    setNavFilterKey(prev => prev + 1);
+    setActiveTab(tab);
+    setIsMobileSidebarOpen(false);
+  };
+
+  // Derived operational metrics from live component state
+  const totalRooms = useMemo(() => {
+    return categories.reduce((sum, cat) => sum + cat.activeCount, 0);
+  }, [categories]);
+
+  const occupiedRooms = Math.round((totalRooms * stats.occupancyRate) / 100);
+  const vacantRoomsCount = Math.max(0, totalRooms - occupiedRooms);
+
+  const checkedInArrivalsCount = useMemo(() => {
+    return arrivals.filter(a => a.status === 'Checked In').length;
+  }, [arrivals]);
+
+  const earliestPendingArrival = useMemo(() => {
+    return arrivals.find(a => a.status !== 'Checked In')?.checkInTime;
+  }, [arrivals]);
+
+  const clearedDeparturesCount = useMemo(() => {
+    return departures.filter(d => d.status === 'Checked Out').length;
+  }, [departures]);
+
   const pendingHousekeepingCount = useMemo(() => {
     return housekeeping.filter(h => h.status !== 'Verified').length;
   }, [housekeeping]);
+
+  const urgentHousekeepingCount = useMemo(() => {
+    return housekeeping.filter(h => h.status !== 'Verified' && h.priority === 'Urgent').length;
+  }, [housekeeping]);
+
+  const unassignedHousekeepingCount = useMemo(() => {
+    return housekeeping.filter(h => h.status !== 'Verified' && !h.assignedTo).length;
+  }, [housekeeping]);
+
+  const openMaintenanceList = useMemo(() => {
+    return maintenance.filter(m => m.status !== 'Resolved');
+  }, [maintenance]);
+
+  const openMaintenanceCount = openMaintenanceList.length;
+
+  const highPriorityMaintenanceCount = useMemo(() => {
+    return openMaintenanceList.filter(m => m.priority === 'High').length;
+  }, [openMaintenanceList]);
+
+  const topMaintenanceLabel = openMaintenanceList[0]
+    ? `${openMaintenanceList[0].roomNumber}: ${openMaintenanceList[0].title}`
+    : undefined;
+
+  const pendingDeparturesWithBalance = useMemo(() => {
+    return departures.filter(d => d.status !== 'Checked Out' && (d.amountDue || 0) > 0);
+  }, [departures]);
+
+  const unconfirmedBookingsCount = useMemo(() => {
+    return bookings.filter(b => b.bookingStatus === 'Pending').length;
+  }, [bookings]);
 
   // Handle: Confirm custom Walk-in Booking
   const handleCreateWalkInBooking = (e: React.FormEvent) => {
@@ -245,15 +322,14 @@ export default function App() {
 
   // Handle: Guest Check-In Action
   const handleCheckInGuest = (id: string) => {
-    setArrivals(prev => prev.map(item => {
-      if (item.id === id) {
-        triggerToast(`Checked In: ${item.guestName} to Room ${item.roomNumber}`);
-        return { ...item, status: 'Checked In' };
-      }
-      return item;
-    }));
+    const target = arrivals.find(item => item.id === id);
+    if (!target || target.status === 'Checked In') return;
 
-    // Generate ₹5,500 checked-in revenue
+    setArrivals(prev => prev.map(item =>
+      item.id === id ? { ...item, status: 'Checked In' } : item
+    ));
+    triggerToast(`Checked In: ${target.guestName} to Cottage ${target.roomNumber}`);
+
     setStats(prev => ({
       ...prev,
       revenue: prev.revenue + 5500,
@@ -263,19 +339,13 @@ export default function App() {
 
   // Handle: Guest Check-Out Action
   const handleCheckOutGuest = (id: string) => {
-    setDepartures(prev => prev.map(item => {
-      if (item.id === id) {
-        triggerToast(`Checked Out: ${item.guestName} from Room ${item.roomNumber}`);
-        return { ...item, status: 'Checked Out' };
-      }
-      return item;
-    }));
+    const target = departures.find(item => item.id === id);
+    if (!target || target.status === 'Checked Out') return;
 
-    // Update stats departures count
-    setStats(prev => ({
-      ...prev,
-      departuresTodayCount: Math.max(0, prev.departuresTodayCount - 1)
-    }));
+    setDepartures(prev => prev.map(item =>
+      item.id === id ? { ...item, status: 'Checked Out', bookingStatus: 'Completed' } : item
+    ));
+    triggerToast(`Checked Out: ${target.guestName} from Cottage ${target.roomNumber}`);
   };
 
   // Handle: AI Assistant "Take Action" (resolves priority housekeeping alerts)
@@ -284,17 +354,25 @@ export default function App() {
   };
 
   const confirmAiHousekeepingClean = () => {
-    // Instantly set dirty/cleaning rooms to Cleaned
-    setHousekeeping(prev => prev.map(task => ({ ...task, status: 'Cleaned' })));
-    
-    // Notify user
-    triggerToast("AI Action: Ramesh Singh & Sunita Bai completed high priority Room cleanups!");
+    setHousekeeping(prev =>
+      prev.map(task =>
+        task.status === 'Pending' || task.status === 'In Progress'
+          ? { ...task, status: 'Cleaned', assignedTo: task.assignedTo || 'Ramesh Singh' }
+          : task
+      )
+    );
+    triggerToast("Housekeeping dispatch confirmed: priority room turnovers updated.");
     setShowAiActionModal(false);
   };
 
-  // Handle: Review guest bill from Pending Payments
+  // Handle: Review guest bill from Pending Payments / Departures
   const handleReviewBilling = (name: string, amount: number) => {
-    setBillingDetail({ name, amount });
+    const matchedDeparture = departures.find(d => d.guestName === name);
+    setBillingDetail({
+      name,
+      amount,
+      roomNumber: matchedDeparture ? `Cottage ${matchedDeparture.roomNumber}` : 'Pending Folios'
+    });
     setShowBillingModal(true);
   };
 
@@ -327,22 +405,25 @@ export default function App() {
       
       {/* Toast banner notifications */}
       {toastMessage && (
-        <div id="toast-banner" className="fixed top-6 left-1/2 -translate-x-1/2 z-50 bg-teal-950 text-white font-semibold text-xs px-5 py-3 rounded-2xl shadow-xl border border-teal-800 flex items-center gap-2 animate-in fade-in slide-in-from-top-4 duration-300">
+        <div id="toast-banner" className="fixed top-6 left-1/2 -translate-x-1/2 z-50 bg-teal-950 text-white font-semibold text-xs px-5 py-3 rounded-2xl shadow-xl border border-teal-800 flex items-center gap-2 max-w-[calc(100vw-2rem)] animate-in fade-in slide-in-from-top-4 duration-300">
           <Sparkles className="w-4 h-4 text-amber-400 shrink-0" />
           <span>{toastMessage}</span>
         </div>
       )}
 
-      {/* Sidebar navigation */}
+      {/* Sidebar navigation (Desktop static + Mobile drawer) */}
       <Sidebar 
         activeTab={activeTab} 
-        setActiveTab={setActiveTab} 
+        setActiveTab={(tab) => navigateToModule(tab)} 
         branding={resortDetails.branding}
         housekeepingCount={pendingHousekeepingCount}
+        maintenanceCount={openMaintenanceCount}
+        isMobileOpen={isMobileSidebarOpen}
+        onCloseMobile={() => setIsMobileSidebarOpen(false)}
       />
 
       {/* Main Content Pane */}
-      <div className="flex-1 flex flex-col h-full overflow-hidden">
+      <div className="flex-1 flex flex-col h-full min-w-0 overflow-hidden">
         
         {/* Top Header */}
         <DashboardHeader 
@@ -350,37 +431,67 @@ export default function App() {
           setSearchQuery={setSearchQuery}
           notificationsCount={notificationsCount}
           onClearNotifications={handleClearNotifications}
-          onOpenSettings={() => setActiveTab('settings')}
+          onOpenSettings={() => navigateToModule('settings')}
+          onToggleMobileMenu={() => setIsMobileSidebarOpen(true)}
         />
 
         {/* Dynamic Navigation Content */}
-        <div className="flex-1 overflow-y-auto p-8">
+        <div className="flex-1 overflow-y-auto overflow-x-hidden p-4 sm:p-6 lg:p-8">
           {activeTab === 'dashboard' ? (
             <div className="flex flex-col gap-6 max-w-7xl mx-auto">
               
               {/* Morning Overview Banner Title */}
-              <div id="dashboard-title-area">
-                <h2 className="text-3xl font-bold font-serif text-teal-950 tracking-tight leading-none">
-                  Morning Overview
-                </h2>
-                <p className="text-slate-500 text-sm mt-2 font-medium">
-                  Here is what is happening at <span className="font-bold text-teal-800">{resortDetails.name}</span> today.
-                </p>
+              <div id="dashboard-title-area" className="flex flex-col sm:flex-row sm:items-end justify-between gap-2">
+                <div>
+                  <h2 className="text-2xl sm:text-3xl font-bold font-serif text-teal-950 tracking-tight leading-none">
+                    Morning Overview
+                  </h2>
+                  <p className="text-slate-500 text-xs sm:text-sm mt-2 font-medium">
+                    Daily front-desk &amp; property summary for <span className="font-bold text-teal-800">{resortDetails.name}</span>, {resortDetails.location}.
+                  </p>
+                </div>
+                <span className="self-start sm:self-auto text-[10px] font-semibold text-slate-500 bg-white px-2.5 py-1 rounded-full border border-slate-200/80">
+                  Sample Session Data • Firestore sync pending
+                </span>
               </div>
 
-              {/* 4 Stat Cards Row */}
-              <StatsGrid stats={stats} />
+              {/* 4 Clickable Stat Cards Row */}
+              <StatsGrid 
+                stats={stats}
+                totalRooms={totalRooms}
+                checkedInArrivals={checkedInArrivalsCount}
+                clearedDepartures={clearedDeparturesCount}
+                earliestPendingArrival={earliestPendingArrival}
+                onNavigateTab={(tab) => navigateToModule(tab)}
+              />
+
+              {/* Compact Today's Operations Hub */}
+              <TodayOperationsSection 
+                pendingHousekeepingCount={pendingHousekeepingCount}
+                urgentHousekeepingCount={urgentHousekeepingCount}
+                openMaintenanceCount={openMaintenanceCount}
+                highPriorityMaintenanceCount={highPriorityMaintenanceCount}
+                topMaintenanceLabel={topMaintenanceLabel}
+                pendingPaymentsAmount={stats.pendingPaymentsAmount}
+                pendingPaymentsGuestsCount={pendingDeparturesWithBalance.length}
+                unassignedRoomsCount={unassignedHousekeepingCount}
+                vacantRoomsCount={vacantRoomsCount}
+                unconfirmedBookingsCount={unconfirmedBookingsCount}
+                onNavigateModule={navigateToModule}
+              />
 
               {/* Lower Section Grid Layout */}
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
                 
-                {/* Left Columns (Occupies 2 columns on desktop) */}
-                <div className="lg:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Left Columns (Occupies 2 columns on desktop): Arrivals + Departures */}
+                <div className="lg:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-6 min-w-0">
                   {/* Today's Arrivals */}
                   <ArrivalsCard 
                     arrivals={filteredArrivals}
                     onAddArrival={handleAddArrival}
                     onCheckIn={handleCheckInGuest}
+                    onViewBooking={(guestName) => navigateToModule('bookings', { bookingsSearch: guestName })}
+                    onNavigateToBookings={() => navigateToModule('bookings')}
                   />
 
                   {/* Today's Departures */}
@@ -388,40 +499,53 @@ export default function App() {
                     departures={filteredDepartures}
                     onCheckOut={handleCheckOutGuest}
                     onReviewBilling={(name, amt) => handleReviewBilling(name, amt)}
+                    onViewBooking={(guestName) => navigateToModule('bookings', { bookingsSearch: guestName })}
+                    onNavigateToBookings={() => navigateToModule('bookings')}
                   />
-
-                  {/* Local Area Pulse Banner Image Card (span full bottom left block) */}
-                  <div className="md:col-span-2">
-                    <PulseCard 
-                      location={resortDetails.location}
-                      weather={resortDetails.weather}
-                      event={resortDetails.event}
-                      bannerImage={resortDetails.bannerImage}
-                    />
-                  </div>
                 </div>
 
                 {/* Right Column Stack */}
-                <div className="flex flex-col gap-6">
+                <div className="flex flex-col gap-6 min-w-0">
                   {/* 7-Day Occupancy Chart */}
-                  <OccupancyChart history={occupancyHistory} />
+                  <OccupancyChart history={occupancyHistory} totalRooms={totalRooms} />
 
                   {/* Pending Payments Widget */}
                   <PendingPaymentsCard 
                     amount={stats.pendingPaymentsAmount} 
-                    onReview={() => handleReviewBilling('Amit Shah', 8200)}
+                    onReview={() => {
+                      const firstDue = pendingDeparturesWithBalance[0];
+                      if (firstDue && firstDue.amountDue) {
+                        handleReviewBilling(firstDue.guestName, firstDue.amountDue);
+                      } else {
+                        navigateToModule('billing', { billingFilter: 'Pending' });
+                      }
+                    }}
                   />
 
                   {/* ResortDesk AI Operations Assistant */}
                   <AIDeskCard 
-                    housekeepingTaskCount={pendingHousekeepingCount}
-                    maintenanceAlertCount={maintenance.filter(m => m.status === 'Open').length}
+                    arrivals={arrivals}
+                    departures={departures}
+                    housekeeping={housekeeping}
+                    maintenance={maintenance}
+                    bookings={bookings}
                     onTakeAction={handleAiAutoResolveHousekeeping}
                     onNewBookingClick={() => setShowBookingModal(true)}
+                    onNavigateModule={navigateToModule}
+                    onReviewBilling={(name, amt) => handleReviewBilling(name, amt)}
                   />
                 </div>
 
               </div>
+
+              {/* Property Overview Card positioned below all operational information */}
+              <PulseCard 
+                propertyName={resortDetails.name}
+                location={resortDetails.location}
+                address={resortDetails.address}
+                checkInTime={resortDetails.checkInTime}
+                checkOutTime={resortDetails.checkOutTime}
+              />
 
             </div>
           ) : activeTab === 'rooms' ? (
@@ -472,10 +596,14 @@ export default function App() {
               onAddGuest={handleAddGuestCRM}
             />
           ) : activeTab === 'billing' ? (
-            <BillingView triggerToast={triggerToast} />
+            <BillingView 
+              triggerToast={triggerToast} 
+              initialStatusFilter={billingNavFilter}
+              navigationKey={navFilterKey}
+            />
           ) : activeTab === 'settings' ? (
             <SettingsView 
-              onNavigateToBilling={() => setActiveTab('billing')}
+              onNavigateToBilling={() => navigateToModule('billing')}
               triggerToast={triggerToast}
             />
           ) : activeTab === 'bookings' ? (
@@ -490,15 +618,23 @@ export default function App() {
                 triggerToast(`Preference profile updated for ${updatedB.guestName}`);
               }}
               onOpenBookingModal={() => setShowBookingModal(true)}
+              initialStatusFilter={bookingsNavFilter.status}
+              initialSearchQuery={bookingsNavFilter.search}
+              navigationKey={navFilterKey}
             />
           ) : activeTab === 'housekeeping' ? (
             <HousekeepingView 
               tasks={housekeeping}
               onUpdateTasks={setHousekeeping}
               triggerToast={triggerToast}
+              initialFilter={housekeepingNavFilter}
+              navigationKey={navFilterKey}
             />
           ) : activeTab === 'maintenance' || activeTab === 'reports' ? (
-            <MaintenanceView />
+            <MaintenanceView 
+              initialFilter={maintenanceNavFilter}
+              navigationKey={navFilterKey}
+            />
           ) : (
             // Placeholder view for other modules
             <div className="max-w-3xl mx-auto bg-white border border-slate-200 p-8 rounded-3xl shadow-sm text-center py-20 flex flex-col items-center gap-4">
@@ -615,11 +751,10 @@ export default function App() {
       {showBillingModal && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-3xl border border-slate-200/80 shadow-2xl max-w-md w-full overflow-hidden animate-in zoom-in-95 duration-200">
-            {/* Modal Header */}
             <div className="bg-amber-950 text-white p-6 flex justify-between items-center">
               <div className="flex items-center gap-2">
                 <FileText className="w-5 h-5 text-orange-200" />
-                <h3 className="font-bold text-base">Guest Outstanding Invoice</h3>
+                <h3 className="font-bold text-base">Guest Outstanding Balance</h3>
               </div>
               <button 
                 onClick={() => {
@@ -632,76 +767,67 @@ export default function App() {
               </button>
             </div>
 
-            {/* Modal Content */}
             <div className="p-6 flex flex-col gap-5">
               <div className="flex items-center justify-between border-b border-slate-100 pb-3">
                 <div>
                   <h4 className="text-xs font-bold text-slate-400 uppercase">Primary Guest</h4>
-                  <p className="text-sm font-bold text-slate-800">{billingDetail?.name || "Amit Shah"}</p>
+                  <p className="text-sm font-bold text-slate-800">{billingDetail?.name || 'Guest Folio'}</p>
                 </div>
                 <div className="text-right">
-                  <h4 className="text-xs font-bold text-slate-400 uppercase">Room No.</h4>
-                  <p className="text-sm font-bold text-slate-800">Room 105</p>
+                  <h4 className="text-xs font-bold text-slate-400 uppercase">Cottage</h4>
+                  <p className="text-sm font-bold text-slate-800">{billingDetail?.roomNumber || 'Cottage 105'}</p>
                 </div>
               </div>
 
-              {/* Bill Details */}
               <div className="flex flex-col gap-2.5">
-                <h4 className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Line Item Summary</h4>
                 <div className="flex justify-between text-xs text-slate-600">
-                  <span>Deluxe Cottage Stay (2 Nights)</span>
-                  <span className="font-semibold text-slate-800">₹11,000</span>
+                  <span>Pending Folio Balance (Stay &amp; Incidentals)</span>
+                  <span className="font-semibold text-slate-800">₹{(billingDetail?.amount ?? 0).toLocaleString('en-IN')}</span>
                 </div>
-                <div className="flex justify-between text-xs text-slate-600">
-                  <span>Room Service & Seafood Platter</span>
-                  <span className="font-semibold text-slate-800">₹3,200</span>
-                </div>
-                <div className="flex justify-between text-xs text-slate-600 border-b border-slate-100 pb-2.5">
-                  <span>Spa & Massage Package</span>
-                  <span className="font-semibold text-slate-800">₹2,200</span>
-                </div>
-                <div className="flex justify-between text-xs font-bold text-slate-800">
-                  <span>Total Bill Amount</span>
-                  <span>₹16,400</span>
-                </div>
-                <div className="flex justify-between text-xs text-emerald-600 font-semibold bg-emerald-50 px-2 py-1 rounded-lg">
-                  <span>Amount Paid (Advance Checkout)</span>
-                  <span>-₹8,200</span>
-                </div>
-                <div className="flex justify-between text-sm font-extrabold text-rose-600 bg-rose-50 px-2.5 py-1.5 rounded-lg border border-rose-100">
-                  <span>Outstanding Balances</span>
-                  <span>₹{billingDetail?.amount || 8200}</span>
+                <div className="flex justify-between text-sm font-extrabold text-rose-600 bg-rose-50 px-2.5 py-2 rounded-lg border border-rose-100">
+                  <span>Outstanding Balance Due</span>
+                  <span>₹{(billingDetail?.amount ?? 0).toLocaleString('en-IN')}</span>
                 </div>
               </div>
 
-              {/* Action Buttons */}
-              <div className="flex gap-3 mt-3">
+              <div className="flex gap-3 mt-2">
                 <button
+                  type="button"
                   onClick={() => {
                     setShowBillingModal(false);
                     setBillingDetail(null);
+                    navigateToModule('billing', { billingFilter: 'Pending' });
                   }}
-                  className="flex-1 py-2.5 border border-slate-200 text-slate-500 rounded-xl text-xs font-semibold hover:bg-slate-50 transition-colors"
+                  className="flex-1 py-2.5 border border-slate-200 text-slate-600 rounded-xl text-xs font-semibold hover:bg-slate-50 transition-colors cursor-pointer"
                 >
-                  Dismiss
+                  Open Billing Ledger
                 </button>
                 <button
+                  type="button"
                   onClick={() => {
-                    // Collect outstanding balances
+                    const collectedAmt = billingDetail?.amount ?? 0;
+                    const guestName = billingDetail?.name;
                     setStats(prev => ({
                       ...prev,
-                      pendingPaymentsAmount: Math.max(0, prev.pendingPaymentsAmount - (billingDetail?.amount || 8200)),
-                      revenue: prev.revenue + (billingDetail?.amount || 8200)
+                      pendingPaymentsAmount: Math.max(0, prev.pendingPaymentsAmount - collectedAmt),
+                      revenue: prev.revenue + collectedAmt
                     }));
-                    // Clear outstanding in departure list
-                    setDepartures(prev => prev.map(d => d.guestName === (billingDetail?.name || "Amit Shah") ? { ...d, amountDue: 0 } : d));
+                    if (guestName) {
+                      setDepartures(prev =>
+                        prev.map(d =>
+                          d.guestName === guestName
+                            ? { ...d, amountDue: 0, paymentStatus: 'Paid' }
+                            : d
+                        )
+                      );
+                    }
                     setShowBillingModal(false);
                     setBillingDetail(null);
-                    triggerToast("Payment successful! Outstanding balances collected.");
+                    triggerToast(`Payment collected (₹${collectedAmt.toLocaleString('en-IN')}) for ${guestName || 'guest'}.`);
                   }}
-                  className="flex-1 py-2.5 bg-teal-800 hover:bg-teal-900 text-white rounded-xl text-xs font-bold transition-colors shadow-md shadow-teal-900/10"
+                  className="flex-1 py-2.5 bg-teal-800 hover:bg-teal-900 text-white rounded-xl text-xs font-bold transition-colors shadow-md shadow-teal-900/10 cursor-pointer"
                 >
-                  Collect ₹{billingDetail?.amount || 8200} Now
+                  Collect ₹{(billingDetail?.amount ?? 0).toLocaleString('en-IN')}
                 </button>
               </div>
             </div>
@@ -713,11 +839,10 @@ export default function App() {
       {showAiActionModal && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-3xl border border-slate-200/80 shadow-2xl max-w-md w-full overflow-hidden animate-in zoom-in-95 duration-200">
-            {/* Modal Header */}
             <div className="bg-teal-900 text-white p-6 flex justify-between items-center">
               <div className="flex items-center gap-2">
                 <Brush className="w-5 h-5 text-teal-300" />
-                <h3 className="font-bold text-base">AI Housekeeping Dispatcher</h3>
+                <h3 className="font-bold text-base">Housekeeping Priority Dispatch</h3>
               </div>
               <button 
                 onClick={() => setShowAiActionModal(false)}
@@ -727,45 +852,53 @@ export default function App() {
               </button>
             </div>
 
-            {/* Modal Content */}
             <div className="p-6 flex flex-col gap-4">
               <p className="text-xs text-slate-500 leading-relaxed">
-                ResortDesk AI identifies that early check-in is expected for **Sarah D'Souza** (Room 204) and **Rajesh Kumar** has already entered Room 102. 
-                Our operations agent proposes dispatching **Ramesh Singh** and **Sunita Bai** immediately:
+                Pending and in-progress housekeeping rooms currently tracked in session state:
               </p>
 
-              {/* Dispatch proposal list */}
-              <div className="flex flex-col gap-2.5 mt-2">
-                <div className="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-100">
-                  <div>
-                    <h4 className="text-xs font-bold text-slate-800">Room 204 (Priority Prepare)</h4>
-                    <p className="text-[10px] text-slate-400">Assigned: Ramesh Singh</p>
-                  </div>
-                  <span className="text-[10px] px-2 py-0.5 bg-amber-50 text-amber-700 font-semibold rounded-lg">Cleaning</span>
-                </div>
-                <div className="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-100">
-                  <div>
-                    <h4 className="text-xs font-bold text-slate-800">Room 105 (Checkout Cleaning)</h4>
-                    <p className="text-[10px] text-slate-400">Assigned: Sunita Bai</p>
-                  </div>
-                  <span className="text-[10px] px-2 py-0.5 bg-rose-50 text-rose-600 font-semibold rounded-lg">Dirty</span>
-                </div>
+              <div className="flex flex-col gap-2.5 max-h-56 overflow-y-auto">
+                {housekeeping
+                  .filter(t => t.status === 'Pending' || t.status === 'In Progress')
+                  .slice(0, 4)
+                  .map(task => (
+                    <div key={task.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-100">
+                      <div>
+                        <h4 className="text-xs font-bold text-slate-800">
+                          {task.roomNumber} ({task.type})
+                        </h4>
+                        <p className="text-[10px] text-slate-400">
+                          {task.assignedTo ? `Assigned: ${task.assignedTo}` : 'Unassigned — ready to dispatch'}
+                        </p>
+                      </div>
+                      <span className={`text-[10px] px-2 py-0.5 font-semibold rounded-lg ${
+                        task.priority === 'Urgent'
+                          ? 'bg-rose-50 text-rose-700'
+                          : 'bg-amber-50 text-amber-700'
+                      }`}>
+                        {task.priority}
+                      </span>
+                    </div>
+                  ))}
               </div>
 
-              <div className="flex gap-3 mt-4">
+              <div className="flex gap-3 mt-2">
                 <button
                   type="button"
-                  onClick={() => setShowAiActionModal(false)}
-                  className="flex-1 py-2.5 border border-slate-200 text-slate-500 rounded-xl text-xs font-semibold hover:bg-slate-50 transition-colors"
+                  onClick={() => {
+                    setShowAiActionModal(false);
+                    navigateToModule('housekeeping', { housekeepingFilter: 'Urgent' });
+                  }}
+                  className="flex-1 py-2.5 border border-slate-200 text-slate-600 rounded-xl text-xs font-semibold hover:bg-slate-50 transition-colors cursor-pointer"
                 >
-                  Cancel Proposal
+                  Open Housekeeping
                 </button>
                 <button
                   type="button"
                   onClick={confirmAiHousekeepingClean}
-                  className="flex-1 py-2.5 bg-teal-800 hover:bg-teal-900 text-white rounded-xl text-xs font-bold transition-colors shadow-md"
+                  className="flex-1 py-2.5 bg-teal-800 hover:bg-teal-900 text-white rounded-xl text-xs font-bold transition-colors shadow-md cursor-pointer"
                 >
-                  Confirm Dispatch List
+                  Mark Queue Cleaned
                 </button>
               </div>
             </div>

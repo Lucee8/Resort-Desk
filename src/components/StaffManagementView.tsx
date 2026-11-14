@@ -86,7 +86,7 @@ export default function StaffManagementView({ initialTab = 'overview' }: StaffMa
   const [notificationsCount, setNotificationsCount] = useState(3);
   const [showNotificationsDropdown, setShowNotificationsDropdown] = useState(false);
   const [showHelpDropdown, setShowHelpDropdown] = useState(false);
-  const [selectedProperty, setSelectedProperty] = useState('Vanya Boutique Resort, Konkan');
+  const [selectedProperty, setSelectedProperty] = useState('Mykonos Cottage, Tarkarli');
 
   // Interactive Toast
   const [toastMessage, setToastMessage] = useState<string | null>(null);

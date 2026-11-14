@@ -21,7 +21,7 @@ export interface Departure {
   avatar: string;
   checkoutTime?: string;
   amountDue?: number;
-  bookingStatus?: 'Confirmed' | 'Completed';
+  bookingStatus?: 'Active' | 'Confirmed' | 'Completed';
   paymentStatus?: 'Paid' | 'Due' | 'Unsettled';
   bookingId?: string;
 }

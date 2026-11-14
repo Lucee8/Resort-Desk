@@ -840,7 +840,7 @@ export const initialStats: ResortStats = {
   revenue: 24500,
   revenueGrowth: 12,
   arrivalsTodayCount: 4,
-  departuresTodayCount: 6,
+  departuresTodayCount: 4,
   pendingPaymentsAmount: 8200
 };
 
@@ -849,8 +849,9 @@ export const resortDetails = {
   branding: 'Mykonos Cottage',
   tagline: 'Boutique Beachfront Sanctuary',
   location: 'Tarkarli, Malvan',
-  weather: '29°C Tropical Breeze',
-  event: 'Tarkarli Water Sports & Scuba Season',
+  address: 'Tarkarli Beach Road, Malvan, Sindhudurg, Maharashtra 416606',
+  checkInTime: '02:00 PM',
+  checkOutTime: '11:00 AM',
   bannerImage: 'https://images.unsplash.com/photo-1540541338287-41700207dee6?auto=format&fit=crop&w=1200&q=80'
 };
 

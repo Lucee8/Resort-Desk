@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { 
   Search, 
   HelpCircle, 
@@ -27,12 +27,16 @@ interface HousekeepingViewProps {
   tasks: HousekeepingTask[];
   onUpdateTasks: (updated: HousekeepingTask[]) => void;
   triggerToast: (msg: string) => void;
+  initialFilter?: 'All' | 'Urgent' | 'Unassigned' | 'Assigned';
+  navigationKey?: number;
 }
 
 export default function HousekeepingView({
   tasks,
   onUpdateTasks,
-  triggerToast
+  triggerToast,
+  initialFilter,
+  navigationKey
 }: HousekeepingViewProps) {
   // Search state
   const [searchQuery, setSearchQuery] = useState('');
@@ -43,7 +47,13 @@ export default function HousekeepingView({
   );
 
   // Filter state ('All', 'Urgent', 'Unassigned', 'Assigned')
-  const [filterType, setFilterType] = useState<'All' | 'Urgent' | 'Unassigned' | 'Assigned'>('All');
+  const [filterType, setFilterType] = useState<'All' | 'Urgent' | 'Unassigned' | 'Assigned'>(initialFilter || 'All');
+
+  useEffect(() => {
+    if (navigationKey === undefined) return;
+    setFilterType(initialFilter || 'All');
+    setSearchQuery('');
+  }, [navigationKey, initialFilter]);
 
   // Staff Modal state
   const [showStaffModal, setShowStaffModal] = useState(false);
