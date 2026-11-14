@@ -1,33 +1,34 @@
 import React, { useState } from 'react';
-import { X, FileText, ChevronRight, Calculator, CheckCircle2, Clock, Utensils, Sparkles } from 'lucide-react';
+import { X, FileText, Calculator } from 'lucide-react';
 import { UnbilledStayItem } from '../../types';
-import { initialUnbilledStays } from '../../data/billingData';
 
 interface UnbilledStaysDrawerProps {
   isOpen: boolean;
   onClose: () => void;
-  unbilledStays?: UnbilledStayItem[];
-  onGenerateInvoiceForStay: (stay: UnbilledStayItem) => void;
+  unbilledStays: UnbilledStayItem[];
+  onGenerateInvoiceForStay: (stay: UnbilledStayItem) => Promise<void> | void;
   triggerToast: (msg: string) => void;
 }
 
 export default function UnbilledStaysDrawer({
   isOpen,
   onClose,
-  unbilledStays = initialUnbilledStays,
+  unbilledStays,
   onGenerateInvoiceForStay,
-  triggerToast
 }: UnbilledStaysDrawerProps) {
   const [filterType, setFilterType] = useState<'ALL' | 'Checking Out Today' | 'In-House'>('ALL');
+  const [submittingId, setSubmittingId] = useState<string | null>(null);
 
-  const filtered = unbilledStays.filter(s => {
+  const checkingOutCount = unbilledStays.filter(
+    (s) => s.status === 'Checking Out Today'
+  ).length;
+  const filtered = unbilledStays.filter((s) => {
     if (filterType === 'ALL') return true;
     return s.status === filterType;
   });
 
   const totalUnbilledAmount = unbilledStays.reduce((acc, s) => acc + s.totalPending, 0);
-
-  const formatINR = (val: number) => new Intl.NumberFormat('en-IN').format(val);
+  const formatINR = (val: number) => new Intl.NumberFormat('en-IN').format(Math.round(val));
 
   if (!isOpen) return null;
 
@@ -41,13 +42,14 @@ export default function UnbilledStaysDrawer({
               <div className="w-8 h-8 rounded-xl bg-indigo-500/20 flex items-center justify-center text-indigo-300">
                 <FileText className="w-4 h-4" />
               </div>
-              <h3 className="font-bold text-base">Unbilled In-House Rooms</h3>
+              <h3 className="font-bold text-base">Unbilled Active Stays</h3>
             </div>
             <p className="text-xs text-slate-400 mt-1">
-              {unbilledStays.length} Rooms with active accumulated folios (Total: ₹{formatINR(totalUnbilledAmount)})
+              {unbilledStays.length} active stay{unbilledStays.length === 1 ? '' : 's'} with pending
+              folio balance (Total: ₹{formatINR(totalUnbilledAmount)})
             </p>
           </div>
-          <button 
+          <button
             type="button"
             onClick={onClose}
             className="text-slate-400 hover:text-white transition-colors cursor-pointer p-1"
@@ -57,108 +59,137 @@ export default function UnbilledStaysDrawer({
         </div>
 
         {/* Filter Pills */}
-        <div className="p-4 border-b border-slate-100 bg-slate-50 flex items-center gap-2 text-xs">
+        <div className="p-4 border-b border-slate-100 bg-slate-50 flex flex-wrap items-center gap-2 text-xs">
           <button
             type="button"
             onClick={() => setFilterType('ALL')}
             className={`px-3 py-1 rounded-xl font-semibold transition-colors cursor-pointer ${
-              filterType === 'ALL' ? 'bg-[#0c4033] text-white shadow-xs' : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'
+              filterType === 'ALL'
+                ? 'bg-[#0c4033] text-white shadow-xs'
+                : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'
             }`}
           >
-            All 14 Rooms
+            All ({unbilledStays.length})
           </button>
           <button
             type="button"
             onClick={() => setFilterType('Checking Out Today')}
             className={`px-3 py-1 rounded-xl font-semibold transition-colors cursor-pointer ${
-              filterType === 'Checking Out Today' ? 'bg-amber-700 text-white shadow-xs' : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'
+              filterType === 'Checking Out Today'
+                ? 'bg-amber-700 text-white shadow-xs'
+                : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'
             }`}
           >
-            Checking Out Today (6)
+            Checking Out Today ({checkingOutCount})
           </button>
           <button
             type="button"
             onClick={() => setFilterType('In-House')}
             className={`px-3 py-1 rounded-xl font-semibold transition-colors cursor-pointer ${
-              filterType === 'In-House' ? 'bg-teal-800 text-white shadow-xs' : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'
+              filterType === 'In-House'
+                ? 'bg-teal-800 text-white shadow-xs'
+                : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'
             }`}
           >
-            In-House Mid-Stay
+            In-House / Upcoming ({Math.max(0, unbilledStays.length - checkingOutCount)})
           </button>
         </div>
 
         {/* List of unbilled stays */}
         <div className="p-6 overflow-y-auto flex flex-col gap-3 flex-1">
-          {filtered.map((stay) => (
-            <div
-              key={stay.id}
-              className="p-4 bg-white rounded-2xl border border-slate-200/80 hover:border-teal-700/50 shadow-2xs hover:shadow-xs transition-all flex flex-col justify-between gap-3"
-            >
-              <div className="flex items-start justify-between">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="font-bold text-sm text-slate-900">{stay.roomNumber}</span>
-                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                      stay.status === 'Checking Out Today' 
-                        ? 'bg-amber-100 text-amber-800 border border-amber-200' 
-                        : 'bg-teal-50 text-teal-800 border border-teal-200'
-                    }`}>
-                      {stay.status}
+          {filtered.length === 0 ? (
+            <div className="py-12 text-center text-xs text-slate-400">
+              All active bookings currently have GST invoices generated.
+            </div>
+          ) : (
+            filtered.map((stay) => (
+              <div
+                key={stay.id}
+                className="p-4 bg-white rounded-2xl border border-slate-200/80 hover:border-teal-700/50 shadow-2xs hover:shadow-xs transition-all flex flex-col justify-between gap-3"
+              >
+                <div className="flex items-start justify-between">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold text-sm text-slate-900">{stay.roomNumber}</span>
+                      <span
+                        className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                          stay.status === 'Checking Out Today'
+                            ? 'bg-amber-100 text-amber-800 border border-amber-200'
+                            : 'bg-teal-50 text-teal-800 border border-teal-200'
+                        }`}
+                      >
+                        {stay.status}
+                      </span>
+                    </div>
+                    <h4 className="font-semibold text-xs text-slate-700 mt-1">{stay.guestName}</h4>
+                    <p className="text-[11px] text-slate-400">
+                      {stay.checkInDate} - {stay.checkOutDate} • {stay.nightsStayed} nights
+                    </p>
+                  </div>
+
+                  <div className="text-right">
+                    <span className="text-sm font-bold text-slate-900 font-sans">
+                      ₹{formatINR(stay.totalPending)}
+                    </span>
+                    <span className="text-[10px] text-slate-400 block">Pending Folio</span>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-3 gap-2 bg-slate-50 p-2.5 rounded-xl text-[11px] text-slate-600 border border-slate-100">
+                  <div>
+                    <span className="text-slate-400 block text-[9px] uppercase font-bold">
+                      Room Tariff
+                    </span>
+                    <span className="font-semibold text-slate-800">
+                      ₹{formatINR(stay.roomTariffPending)}
                     </span>
                   </div>
-                  <h4 className="font-semibold text-xs text-slate-700 mt-1">{stay.guestName}</h4>
-                  <p className="text-[11px] text-slate-400">
-                    {stay.checkInDate} - {stay.checkOutDate} • {stay.nightsStayed} nights logged
-                  </p>
+                  <div>
+                    <span className="text-slate-400 block text-[9px] uppercase font-bold">
+                      Meal Plan / F&amp;B
+                    </span>
+                    <span className="font-semibold text-slate-800">
+                      ₹{formatINR(stay.diningPending)}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 block text-[9px] uppercase font-bold">
+                      Extras
+                    </span>
+                    <span className="font-semibold text-slate-800">
+                      ₹{formatINR(stay.spaPending + stay.laundryPending)}
+                    </span>
+                  </div>
                 </div>
 
-                <div className="text-right">
-                  <span className="text-sm font-bold text-slate-900 font-sans">
-                    ₹{formatINR(stay.totalPending)}
-                  </span>
-                  <span className="text-[10px] text-slate-400 block">+ 18% GST</span>
+                <div className="flex items-center justify-end pt-1">
+                  <button
+                    type="button"
+                    disabled={submittingId === stay.id}
+                    onClick={async () => {
+                      setSubmittingId(stay.id);
+                      try {
+                        await onGenerateInvoiceForStay(stay);
+                        onClose();
+                      } finally {
+                        setSubmittingId(null);
+                      }
+                    }}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#0c4033] hover:bg-[#082e25] disabled:opacity-60 text-white text-xs font-semibold rounded-xl shadow-xs transition-colors cursor-pointer"
+                  >
+                    <Calculator className="w-3.5 h-3.5" />
+                    <span>
+                      {submittingId === stay.id ? 'Creating...' : 'Create Checkout Invoice'}
+                    </span>
+                  </button>
                 </div>
               </div>
-
-              {/* Folio Breakdown */}
-              <div className="grid grid-cols-3 gap-2 bg-slate-50 p-2.5 rounded-xl text-[11px] text-slate-600 border border-slate-100">
-                <div>
-                  <span className="text-slate-400 block text-[9px] uppercase font-bold">Room Tariff</span>
-                  <span className="font-semibold text-slate-800">₹{formatINR(stay.roomTariffPending)}</span>
-                </div>
-                <div>
-                  <span className="text-slate-400 block text-[9px] uppercase font-bold">F&amp;B Orders</span>
-                  <span className="font-semibold text-slate-800">₹{formatINR(stay.diningPending)}</span>
-                </div>
-                <div>
-                  <span className="text-slate-400 block text-[9px] uppercase font-bold">Spa &amp; Extras</span>
-                  <span className="font-semibold text-slate-800">₹{formatINR(stay.spaPending + stay.laundryPending)}</span>
-                </div>
-              </div>
-
-              {/* Action */}
-              <div className="flex items-center justify-end pt-1">
-                <button
-                  type="button"
-                  onClick={() => {
-                    onGenerateInvoiceForStay(stay);
-                    onClose();
-                  }}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#0c4033] hover:bg-[#082e25] text-white text-xs font-semibold rounded-xl shadow-xs transition-colors cursor-pointer"
-                >
-                  <Calculator className="w-3.5 h-3.5" />
-                  <span>Create Checkout Invoice</span>
-                </button>
-              </div>
-            </div>
-          ))}
+            ))
+          )}
         </div>
 
-        {/* Footer */}
         <div className="p-4 px-6 bg-slate-50 border-t border-slate-200 flex items-center justify-between shrink-0">
-          <span className="text-xs text-slate-500">
-            Unbilled folios sync live from POS &amp; Housekeeping
-          </span>
+          <span className="text-xs text-slate-500">Derived from live Bookings in Firestore</span>
           <button
             type="button"
             onClick={onClose}

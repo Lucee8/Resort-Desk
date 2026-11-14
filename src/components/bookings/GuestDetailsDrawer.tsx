@@ -39,6 +39,7 @@ interface GuestDetailsDrawerProps {
   onSendWhatsApp: (booking: Booking) => void;
   onUpdateNotes: (booking: Booking, noteText: string) => Promise<void>;
   onAttachIdDocument: (booking: Booking, downloadUrl: string) => Promise<void>;
+  onEditBooking?: (booking: Booking) => void;
   onViewFullGuestCRM?: (booking: Booking) => void;
 }
 
@@ -57,6 +58,7 @@ export default function GuestDetailsDrawer({
   onSendWhatsApp,
   onUpdateNotes,
   onAttachIdDocument,
+  onEditBooking,
   onViewFullGuestCRM,
 }: GuestDetailsDrawerProps) {
   const [showMoveRoomPicker, setShowMoveRoomPicker] = useState(false);
@@ -550,6 +552,19 @@ export default function GuestDetailsDrawer({
                   <Printer className="w-3.5 h-3.5 text-[#004B38]" />
                   <span>Booking Voucher</span>
                 </button>
+                {onEditBooking && booking.bookingStatus !== 'Cancelled' && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowMoreMenu(false);
+                      onEditBooking(booking);
+                    }}
+                    className="w-full text-left px-3 py-2 hover:bg-[#F7F6F3] font-semibold text-[#17221F] flex items-center gap-2 cursor-pointer"
+                  >
+                    <ArrowRightLeft className="w-3.5 h-3.5 text-[#004B38]" />
+                    <span>Edit Dates / Stay</span>
+                  </button>
+                )}
                 {onViewFullGuestCRM && (
                   <button
                     type="button"
@@ -568,7 +583,7 @@ export default function GuestDetailsDrawer({
                     type="button"
                     onClick={() => {
                       setShowMoreMenu(false);
-                      runAction('cancel', () => onCancelBooking(booking));
+                      void onCancelBooking(booking);
                     }}
                     className="w-full text-left px-3 py-2 hover:bg-rose-50 font-semibold text-rose-700 flex items-center gap-2 cursor-pointer border-t border-[#E9ECE9] mt-1"
                   >

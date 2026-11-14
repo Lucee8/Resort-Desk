@@ -1,0 +1,405 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Global default-deny safety net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // ------------------------------------------------------------------
+    // Core RBAC & Validation Primitives
+    // ------------------------------------------------------------------
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-\\.]+$');
+    }
+
+    function isSignedIn() {
+      return request.auth != null && request.auth.uid != null;
+    }
+
+    function isAdmin() {
+      return isSignedIn()
+        && exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+    }
+
+    function hasActiveStaffProfile() {
+      return isSignedIn()
+        && exists(/databases/$(database)/documents/staffProfiles/$(request.auth.uid))
+        && get(/databases/$(database)/documents/staffProfiles/$(request.auth.uid)).data.disabled != true;
+    }
+
+    function isStaff() {
+      return isAdmin() || hasActiveStaffProfile();
+    }
+
+    function isManagerOrAdmin() {
+      return isAdmin() || (
+        hasActiveStaffProfile() &&
+        get(/databases/$(database)/documents/staffProfiles/$(request.auth.uid)).data.role in [
+          'Admin',
+          'Resort Owner',
+          'Owner',
+          'Manager',
+          'General Manager'
+        ]
+      );
+    }
+
+    function isValidBookingWrite() {
+      let d = request.resource.data;
+      return d.guestName is string && d.guestName.size() >= 1 && d.guestName.size() <= 160
+        && d.roomNumber is string && d.roomNumber.size() >= 1 && d.roomNumber.size() <= 80
+        && d.bookingStatus in ['Confirmed', 'Checked-in', 'Checked-out', 'Pending', 'Cancelled']
+        && d.paymentStatus in ['Paid', 'Partial', 'Unpaid']
+        && d.amount is number && d.amount >= 0;
+    }
+
+    function isValidGuestWrite() {
+      let d = request.resource.data;
+      return d.name is string && d.name.size() >= 1 && d.name.size() <= 160
+        && (!('phone' in d) || (d.phone is string && d.phone.size() <= 40))
+        && (!('email' in d) || (d.email is string && d.email.size() <= 180));
+    }
+
+    function isValidInvoiceWrite() {
+      let d = request.resource.data;
+      return d.invoiceNumber is string && d.invoiceNumber.size() >= 2 && d.invoiceNumber.size() <= 64
+        && d.guestName is string && d.guestName.size() >= 1 && d.guestName.size() <= 160
+        && d.totalAmount is number && d.totalAmount >= 0
+        && d.status in ['Paid', 'Pending', 'Partial', 'Refunded', 'Overdue'];
+    }
+
+    function isValidPaymentWrite() {
+      let d = request.resource.data;
+      return d.amount is number && d.amount > 0
+        && d.method is string && d.method.size() >= 2 && d.method.size() <= 64;
+    }
+
+    // ------------------------------------------------------------------
+    // Staff Profiles & Admins (Strict Privilege Escalation Guard)
+    // ------------------------------------------------------------------
+    match /admins/{uid} {
+      allow get: if isSignedIn() && (request.auth.uid == uid || isAdmin());
+      allow list: if isAdmin();
+      allow write: if isAdmin();
+    }
+
+    match /staffProfiles/{uid} {
+      allow get: if isSignedIn() && (request.auth.uid == uid || isManagerOrAdmin());
+      allow list: if isManagerOrAdmin();
+      allow create: if isSignedIn()
+        && request.auth.uid == uid
+        && isValidId(uid)
+        && request.resource.data.keys().hasAll(['uid', 'email', 'role'])
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.role in ['Receptionist', 'Staff']
+        && request.resource.data.disabled != true;
+      allow update: if isValidId(uid) && (
+        isManagerOrAdmin() ||
+        (
+          request.auth.uid == uid
+          && request.resource.data.uid == resource.data.uid
+          && request.resource.data.role == resource.data.role
+          && request.resource.data.disabled == resource.data.disabled
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['displayName', 'lastLoginAt', 'updatedAt'])
+        )
+      );
+      allow delete: if isAdmin();
+    }
+
+    // ------------------------------------------------------------------
+    // Cloud Functions Internal Idempotency & Webhook Collections
+    // ------------------------------------------------------------------
+    match /whatsappDispatchKeys/{keyId} {
+      allow get, list: if isStaff();
+      allow write: if false; // Admin SDK / Cloud Functions only
+    }
+
+    match /emailDispatchKeys/{keyId} {
+      allow get, list: if isStaff();
+      allow write: if false; // Admin SDK / Cloud Functions only
+    }
+
+    match /whatsappInbound/{wamid} {
+      allow get, list: if isStaff();
+      allow write: if false; // Admin SDK / Webhook Cloud Function only
+    }
+
+    // ------------------------------------------------------------------
+    // Health Check Document
+    // ------------------------------------------------------------------
+    match /_health/{docId} {
+      allow get: if isStaff() && isValidId(docId);
+      allow write: if false;
+    }
+
+    // ------------------------------------------------------------------
+    // Core PMS, Guest PII & Financial Collections
+    // ------------------------------------------------------------------
+    match /bookings/{bookingId} {
+      allow get: if isStaff() && isValidId(bookingId);
+      allow list: if isStaff();
+      allow create, update: if isStaff() && isValidId(bookingId) && isValidBookingWrite();
+      allow delete: if isManagerOrAdmin() && isValidId(bookingId);
+    }
+
+    match /guests/{guestId} {
+      allow get: if isStaff() && isValidId(guestId);
+      allow list: if isStaff();
+      allow create, update: if isStaff() && isValidId(guestId) && isValidGuestWrite();
+      allow delete: if isManagerOrAdmin() && isValidId(guestId);
+    }
+
+    match /invoices/{invoiceId} {
+      allow get: if isStaff() && isValidId(invoiceId);
+      allow list: if isStaff();
+      allow create, update: if isStaff() && isValidId(invoiceId) && isValidInvoiceWrite();
+      allow delete: if isManagerOrAdmin() && isValidId(invoiceId);
+    }
+
+    match /payments/{paymentId} {
+      allow get: if isStaff() && isValidId(paymentId);
+      allow list: if isStaff();
+      allow create: if isStaff() && isValidId(paymentId) && isValidPaymentWrite();
+      allow update, delete: if isManagerOrAdmin() && isValidId(paymentId);
+    }
+
+    match /rooms/{roomId} {
+      allow get: if isStaff() && isValidId(roomId);
+      allow list: if isStaff();
+      allow create, update: if isStaff() && isValidId(roomId);
+      allow delete: if isManagerOrAdmin() && isValidId(roomId);
+    }
+
+    match /roomCategories/{catId} {
+      allow get: if isStaff() && isValidId(catId);
+      allow list: if isStaff();
+      allow create, update: if isStaff() && isValidId(catId);
+      allow delete: if isManagerOrAdmin() && isValidId(catId);
+    }
+
+    match /propertyAmenities/{amenityId} {
+      allow get: if isStaff() && isValidId(amenityId);
+      allow list: if isStaff();
+      allow create, update: if isStaff() && isValidId(amenityId);
+      allow delete: if isManagerOrAdmin() && isValidId(amenityId);
+    }
+
+    match /propertyCalendar/{docId} {
+      allow get: if isStaff() && isValidId(docId);
+      allow list: if isStaff();
+      allow create, update: if isStaff() && isValidId(docId);
+      allow delete: if isManagerOrAdmin() && isValidId(docId);
+    }
+
+    // ------------------------------------------------------------------
+    // Housekeeping, Maintenance & Inventory Collections
+    // ------------------------------------------------------------------
+    match /housekeepingTasks/{taskId} {
+      allow get: if isStaff() && isValidId(taskId);
+      allow list: if isStaff();
+      allow create, update: if isStaff() && isValidId(taskId);
+      allow delete: if isManagerOrAdmin() && isValidId(taskId);
+    }
+
+    match /maintenanceTickets/{ticketId} {
+      allow get: if isStaff() && isValidId(ticketId);
+      allow list: if isStaff();
+      allow create, update: if isStaff() && isValidId(ticketId);
+      allow delete: if isManagerOrAdmin() && isValidId(ticketId);
+    }
+
+    match /technicians/{techId} {
+      allow get: if isStaff() && isValidId(techId);
+      allow list: if isStaff();
+      allow create, update: if isStaff() && isValidId(techId);
+      allow delete: if isManagerOrAdmin() && isValidId(techId);
+    }
+
+    match /predictiveAlerts/{alertId} {
+      allow get: if isStaff() && isValidId(alertId);
+      allow list: if isStaff();
+      allow create, update: if isStaff() && isValidId(alertId);
+      allow delete: if isManagerOrAdmin() && isValidId(alertId);
+    }
+
+    match /recentlyResolvedMaintenance/{docId} {
+      allow get: if isStaff() && isValidId(docId);
+      allow list: if isStaff();
+      allow create, update: if isStaff() && isValidId(docId);
+      allow delete: if isManagerOrAdmin() && isValidId(docId);
+    }
+
+    match /maintenanceVendors/{vendorId} {
+      allow get: if isStaff() && isValidId(vendorId);
+      allow list: if isStaff();
+      allow create, update: if isStaff() && isValidId(vendorId);
+      allow delete: if isManagerOrAdmin() && isValidId(vendorId);
+    }
+
+    match /inventoryItems/{itemId} {
+      allow get: if isStaff() && isValidId(itemId);
+      allow list: if isStaff();
+      allow create, update, delete: if isStaff() && isValidId(itemId);
+    }
+
+    match /purchaseOrders/{poId} {
+      allow get: if isStaff() && isValidId(poId);
+      allow list: if isStaff();
+      allow create, update: if isStaff() && isValidId(poId);
+      allow delete: if isManagerOrAdmin() && isValidId(poId);
+    }
+
+    match /inventorySuppliers/{supplierId} {
+      allow get: if isStaff() && isValidId(supplierId);
+      allow list: if isStaff();
+      allow create, update: if isStaff() && isValidId(supplierId);
+      allow delete: if isManagerOrAdmin() && isValidId(supplierId);
+    }
+
+    match /inventoryAlerts/{alertId} {
+      allow get: if isStaff() && isValidId(alertId);
+      allow list: if isStaff();
+      allow create, update: if isStaff() && isValidId(alertId);
+      allow delete: if isManagerOrAdmin() && isValidId(alertId);
+    }
+
+    match /inventoryAIInsights/{insightId} {
+      allow get: if isStaff() && isValidId(insightId);
+      allow list: if isStaff();
+      allow create, update, delete: if isStaff() && isValidId(insightId);
+    }
+
+    // ------------------------------------------------------------------
+    // HR, Payroll & Admin Settings Collections (Manager/Admin Guarded)
+    // ------------------------------------------------------------------
+    match /staffMembers/{staffId} {
+      allow get: if isStaff() && isValidId(staffId);
+      allow list: if isStaff();
+      allow create, update, delete: if isManagerOrAdmin() && isValidId(staffId);
+    }
+
+    match /staffLeaveRequests/{reqId} {
+      allow get: if isStaff() && isValidId(reqId);
+      allow list: if isStaff();
+      allow create: if isStaff() && isValidId(reqId);
+      allow update, delete: if isManagerOrAdmin() && isValidId(reqId);
+    }
+
+    match /staffWeeklyCoverage/{dayId} {
+      allow get: if isStaff() && isValidId(dayId);
+      allow list: if isStaff();
+      allow create, update: if isManagerOrAdmin() && isValidId(dayId);
+      allow delete: if isAdmin() && isValidId(dayId);
+    }
+
+    match /staffShiftPlans/{shiftId} {
+      allow get: if isStaff() && isValidId(shiftId);
+      allow list: if isStaff();
+      allow create, update: if isManagerOrAdmin() && isValidId(shiftId);
+      allow delete: if isAdmin() && isValidId(shiftId);
+    }
+
+    match /staffTasks/{taskId} {
+      allow get: if isStaff() && isValidId(taskId);
+      allow list: if isStaff();
+      allow create, update: if isStaff() && isValidId(taskId);
+      allow delete: if isManagerOrAdmin() && isValidId(taskId);
+    }
+
+    match /staffAIInsights/{insightId} {
+      allow get: if isStaff() && isValidId(insightId);
+      allow list: if isStaff();
+      allow create, update: if isStaff() && isValidId(insightId);
+      allow delete: if isManagerOrAdmin() && isValidId(insightId);
+    }
+
+    match /billingConfig/{docId} {
+      allow get: if isStaff() && isValidId(docId);
+      allow list: if isStaff();
+      allow create, update: if isManagerOrAdmin() && isValidId(docId);
+      allow delete: if false;
+    }
+
+    match /settings/{docId} {
+      allow get: if isStaff() && isValidId(docId);
+      allow list: if isStaff();
+      allow create, update: if isManagerOrAdmin() && isValidId(docId);
+      allow delete: if false;
+    }
+
+    match /reviewConfig/{docId} {
+      allow get: if isStaff() && isValidId(docId);
+      allow list: if isStaff();
+      allow create, update: if isManagerOrAdmin() && isValidId(docId);
+      allow delete: if false;
+    }
+
+    // ------------------------------------------------------------------
+    // Reviews, WhatsApp & Email Communication Logs
+    // ------------------------------------------------------------------
+    match /reviews/{reviewId} {
+      allow get: if isStaff() && isValidId(reviewId);
+      allow list: if isStaff();
+      allow create, update: if isStaff() && isValidId(reviewId);
+      allow delete: if isManagerOrAdmin() && isValidId(reviewId);
+    }
+
+    match /reviewSentimentTopics/{topicId} {
+      allow get: if isStaff() && isValidId(topicId);
+      allow list: if isStaff();
+      allow create, update: if isStaff() && isValidId(topicId);
+      allow delete: if isManagerOrAdmin() && isValidId(topicId);
+    }
+
+    match /reviewAIInsights/{insightId} {
+      allow get: if isStaff() && isValidId(insightId);
+      allow list: if isStaff();
+      allow create, update: if isStaff() && isValidId(insightId);
+      allow delete: if isManagerOrAdmin() && isValidId(insightId);
+    }
+
+    match /whatsappWorkflows/{wfId} {
+      allow get: if isStaff() && isValidId(wfId);
+      allow list: if isStaff();
+      allow create, update: if isStaff() && isValidId(wfId);
+      allow delete: if isManagerOrAdmin() && isValidId(wfId);
+    }
+
+    match /whatsappTemplates/{tmplId} {
+      allow get: if isStaff() && isValidId(tmplId);
+      allow list: if isStaff();
+      allow create, update: if isStaff() && isValidId(tmplId);
+      allow delete: if isManagerOrAdmin() && isValidId(tmplId);
+    }
+
+    match /whatsappInsights/{insightId} {
+      allow get: if isStaff() && isValidId(insightId);
+      allow list: if isStaff();
+      allow create, update, delete: if isStaff() && isValidId(insightId);
+    }
+
+    match /whatsappLogs/{logId} {
+      allow get: if isStaff() && isValidId(logId);
+      allow list: if isStaff();
+      allow create, update: if isStaff() && isValidId(logId);
+      allow delete: if isAdmin() && isValidId(logId);
+    }
+
+    match /emailLogs/{logId} {
+      allow get: if isStaff() && isValidId(logId);
+      allow list: if isStaff();
+      allow create, update: if isStaff() && isValidId(logId);
+      allow delete: if isAdmin() && isValidId(logId);
+    }
+
+    match /notifications/{docId} {
+      allow get: if isStaff() && isValidId(docId);
+      allow list: if isStaff();
+      allow create, update: if isStaff() && isValidId(docId);
+      allow delete: if isManagerOrAdmin() && isValidId(docId);
+    }
+  }
+}

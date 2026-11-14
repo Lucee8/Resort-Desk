@@ -69,10 +69,10 @@ export default function TemplateManagerModal({
       body,
       variables: vars,
       sampleValues: {
-        GuestName: 'Anand Sharma',
-        ResortName: 'Majestic Serenity Resort',
-        RoomNumber: 'Villa 304',
-        CheckInDate: 'Aug 18, 2026'
+        GuestName: 'Rohan Kulkarni',
+        ResortName: 'Mykonos Cottage, Tarkarli',
+        RoomNumber: 'Cottage 101',
+        CheckInDate: 'Tomorrow'
       },
       lastUsed: 'Just now',
       useCount: 0

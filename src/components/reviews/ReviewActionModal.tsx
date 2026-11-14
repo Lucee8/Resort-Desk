@@ -50,7 +50,7 @@ export default function ReviewActionModal({
     'Complimentary Luxury Villa Upgrade + 25% Off Next Stay + Private 5G Mesh Router'
   );
   const [personalNote, setPersonalNote] = useState(
-    'Dear Marcus, Anand Sharma (GM) here. We have taken immediate action to resolve the Wi-Fi in the Deluxe Wing and would be honored to host you again with our compliments.'
+    'Dear Guest, Mykonos Cottage Management here. We have taken immediate action to resolve the issue you mentioned and would be honored to host you again in Tarkarli with our compliments.'
   );
 
   const handleSubmit = (e: React.FormEvent) => {

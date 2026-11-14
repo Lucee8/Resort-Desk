@@ -35,6 +35,7 @@ export default function GoogleIntegrationModal({
   const [activeTab, setActiveTab] = useState<'oauth' | 'sync' | 'autoreply'>('oauth');
   const [formData, setFormData] = useState<GoogleReviewsIntegrationConfig>(config);
   const [isAuthenticating, setIsAuthenticating] = useState(false);
+  const [confirmDisconnect, setConfirmDisconnect] = useState(false);
 
   if (!isOpen) return null;
 
@@ -56,16 +57,15 @@ export default function GoogleIntegrationModal({
   };
 
   const handleDisconnect = () => {
-    if (confirm("Disconnect Google Business Profile integration? Real-time review sync will pause.")) {
-      const updated: GoogleReviewsIntegrationConfig = {
-        ...formData,
-        isConnected: false,
-        lastSyncedAt: 'Disconnected'
-      };
-      setFormData(updated);
-      onSaveConfig(updated);
-      triggerToast("Google Business Profile integration disconnected.");
-    }
+    const updated: GoogleReviewsIntegrationConfig = {
+      ...formData,
+      isConnected: false,
+      lastSyncedAt: 'Disconnected',
+    };
+    setFormData(updated);
+    onSaveConfig(updated);
+    setConfirmDisconnect(false);
+    triggerToast('Google Business Profile integration disconnected.');
   };
 
   const handleSave = () => {
@@ -168,12 +168,32 @@ export default function GoogleIntegrationModal({
                     <p className="text-sm font-semibold text-slate-900 mt-0.5">{formData.connectedAccount}</p>
                   </div>
                   {formData.isConnected ? (
-                    <button
-                      onClick={handleDisconnect}
-                      className="px-3 py-1.5 bg-rose-50 text-rose-700 border border-rose-200 hover:bg-rose-100 rounded-xl text-xs font-semibold transition-colors"
-                    >
-                      Disconnect
-                    </button>
+                    confirmDisconnect ? (
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={handleDisconnect}
+                          className="px-3 py-1.5 bg-rose-600 text-white rounded-xl text-xs font-semibold cursor-pointer"
+                        >
+                          Confirm Disconnect
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setConfirmDisconnect(false)}
+                          className="px-2.5 py-1.5 bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold cursor-pointer"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setConfirmDisconnect(true)}
+                        className="px-3 py-1.5 bg-rose-50 text-rose-700 border border-rose-200 hover:bg-rose-100 rounded-xl text-xs font-semibold transition-colors cursor-pointer"
+                      >
+                        Disconnect
+                      </button>
+                    )
                   ) : (
                     <button
                       onClick={handleSimulateOAuthConnect}

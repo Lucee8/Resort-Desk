@@ -1,22 +1,18 @@
-import React, { useState, useMemo } from 'react';
-import { 
-  Sparkles, 
-  Calendar, 
-  User, 
-  DollarSign, 
-  CheckCircle, 
-  Plus, 
-  X, 
-  Layers, 
-  FileText, 
-  Brush, 
-  TrendingUp, 
-  MessageSquare, 
-  AlertCircle 
+import React, { useState, useMemo, useEffect } from 'react';
+import {
+  Sparkles,
+  FileText,
+  Brush,
+  X,
+  Layers,
+  ShieldAlert,
+  Database,
+  Loader2,
+  AlertCircle,
 } from 'lucide-react';
 
 import Sidebar from './components/Sidebar';
-import DashboardHeader from './components/DashboardHeader';
+import DashboardHeader, { OperationalHeaderAlert } from './components/DashboardHeader';
 import StatsGrid from './components/StatsGrid';
 import TodayOperationsSection, { OperationsNavigationOptions } from './components/TodayOperationsSection';
 import ArrivalsCard from './components/ArrivalsCard';
@@ -36,25 +32,75 @@ import ReviewsManagementView from './components/ReviewsManagementView';
 import WhatsAppAutomationView from './components/WhatsAppAutomationView';
 import BillingView from './components/billing/BillingView';
 import SettingsView from './components/settings/SettingsView';
+import NewReservationModal from './components/bookings/NewReservationModal';
+import StaffAuthModal from './components/auth/StaffAuthModal';
 
-import { 
-  initialArrivals, 
-  initialDepartures, 
-  initialHousekeeping, 
-  initialMaintenance,
-  initialOccupancyHistory, 
-  initialStats, 
-  resortDetails,
-  initialBookings,
-  initialRoomCategories,
-  initialPropertyAmenities,
-  initialRoomMaintenance,
-  initialGuestsCRM
-} from './data';
+import { useAuth } from './context/AuthContext';
+import { resortDetails } from './data';
+import { initialSettingsData } from './data/settingsData';
 
-import { Arrival, Departure, HousekeepingTask, MaintenanceAlert, Booking, RoomCategory, PropertyAmenity, RoomMaintenanceStatus, GuestCRM } from './types';
+import {
+  subscribeBookings,
+  subscribeRooms,
+  subscribeGuests,
+  createReservationAtomic,
+  checkInBookingInFirestore,
+  checkOutBookingInFirestore,
+  recordBookingPaymentAtomic,
+  updateRoomStatusInFirestore,
+} from './services/bookingsService';
+
+import {
+  subscribeCollection,
+  upsertCollectionDoc,
+  subscribeBlockedDays,
+  saveBlockedDays,
+  createOrMergeGuestCRM,
+  saveHousekeepingTaskAndSyncRoom,
+  batchUpdateHousekeepingTasks,
+  subscribeResortSettings,
+  saveResortSettings,
+  subscribeNotificationsReadState,
+  markNotificationsReadInFirestore,
+  seedAllMykonosCollections,
+} from './services/resortDataService';
+
+import {
+  addDaysISO,
+  diffNights,
+  formatFullDate,
+  formatShortDate,
+  getTodayISO,
+  isBookingOccupyingDate,
+  parseISODate,
+  resolveBookingDatesISO,
+} from './utils/bookingUtils';
+
+import {
+  Arrival,
+  Departure,
+  HousekeepingTask,
+  MaintenanceAlert,
+  MaintenanceTicket,
+  Booking,
+  RoomCategory,
+  PropertyAmenity,
+  RoomUnit,
+  GuestCRM,
+  BillingInvoice,
+  InventoryItem,
+  StaffMember,
+  StaffLeaveRequest,
+  ReviewItem,
+  WhatsAppMessageLog,
+  ResortDeskSettings,
+  OccupancyDay,
+  ResortStats,
+} from './types';
 
 export default function App() {
+  const { user, firestoreStatus, firestoreMessage, openAuthModal, recheckFirestore } = useAuth();
+
   // Navigation & mobile drawer state
   const [activeTab, setActiveTab] = useState<string>('dashboard');
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState<boolean>(false);
@@ -62,83 +108,146 @@ export default function App() {
   // Deep navigation filter states
   const [navFilterKey, setNavFilterKey] = useState<number>(0);
   const [bookingsNavFilter, setBookingsNavFilter] = useState<{ status?: string; search?: string }>({});
-  const [housekeepingNavFilter, setHousekeepingNavFilter] = useState<'All' | 'Urgent' | 'Unassigned' | 'Assigned'>('All');
-  const [maintenanceNavFilter, setMaintenanceNavFilter] = useState<'all' | 'high_priority' | 'unassigned' | 'completed'>('all');
+  const [housekeepingNavFilter, setHousekeepingNavFilter] = useState<
+    'All' | 'Urgent' | 'Unassigned' | 'Assigned'
+  >('All');
+  const [maintenanceNavFilter, setMaintenanceNavFilter] = useState<
+    'all' | 'high_priority' | 'unassigned' | 'completed'
+  >('all');
   const [billingNavFilter, setBillingNavFilter] = useState<string>('ALL');
 
   // Search query state
   const [searchQuery, setSearchQuery] = useState<string>('');
 
-  // Core entities state
-  const [arrivals, setArrivals] = useState<Arrival[]>(initialArrivals);
-  const [departures, setDepartures] = useState<Departure[]>(initialDepartures);
-  const [housekeeping, setHousekeeping] = useState<HousekeepingTask[]>(initialHousekeeping);
-  const [maintenance, setMaintenance] = useState<MaintenanceAlert[]>(initialMaintenance);
-  const [stats, setStats] = useState(initialStats);
-  const [occupancyHistory, setOccupancyHistory] = useState(initialOccupancyHistory);
-  const [bookings, setBookings] = useState<Booking[]>(initialBookings);
+  // Live Firestore states
+  const [dataLoading, setDataLoading] = useState<boolean>(true);
+  const [firestoreError, setFirestoreError] = useState<string | null>(null);
+  const [seeding, setSeeding] = useState<boolean>(false);
 
-  // Room Management states
-  const [categories, setCategories] = useState<RoomCategory[]>(initialRoomCategories);
-  const [propertyAmenities, setPropertyAmenities] = useState<PropertyAmenity[]>(initialPropertyAmenities);
-  const [roomMaintenance, setRoomMaintenance] = useState<RoomMaintenanceStatus[]>(initialRoomMaintenance);
-
-  // Guest CRM states
-  const [guestsCRM, setGuestsCRM] = useState<GuestCRM[]>(() => {
-    const saved = localStorage.getItem('resortdesk_guests_crm');
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch (e) {
-        // ignore
-      }
-    }
-    return initialGuestsCRM;
-  });
-
-  const handleUpdateGuestCRM = (updated: GuestCRM) => {
-    setGuestsCRM(prev => {
-      const next = prev.map(g => g.id === updated.id ? updated : g);
-      localStorage.setItem('resortdesk_guests_crm', JSON.stringify(next));
-      return next;
-    });
-    triggerToast(`CRM profile updated for ${updated.name}`);
-  };
-
-  const handleAddGuestCRM = (newGuest: GuestCRM) => {
-    setGuestsCRM(prev => {
-      const next = [...prev, newGuest];
-      localStorage.setItem('resortdesk_guests_crm', JSON.stringify(next));
-      return next;
-    });
-    triggerToast(`New guest ${newGuest.name} registered to CRM database!`);
-  };
+  const [bookings, setBookings] = useState<Booking[]>([]);
+  const [rooms, setRooms] = useState<RoomUnit[]>([]);
+  const [guestsCRM, setGuestsCRM] = useState<GuestCRM[]>([]);
+  const [housekeeping, setHousekeeping] = useState<HousekeepingTask[]>([]);
+  const [maintenanceTickets, setMaintenanceTickets] = useState<MaintenanceTicket[]>([]);
+  const [categories, setCategories] = useState<RoomCategory[]>([]);
+  const [propertyAmenities, setPropertyAmenities] = useState<PropertyAmenity[]>([]);
+  const [blockedDays, setBlockedDays] = useState<number[]>([]);
+  const [invoices, setInvoices] = useState<BillingInvoice[]>([]);
+  const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([]);
+  const [staffMembers, setStaffMembers] = useState<StaffMember[]>([]);
+  const [staffLeaveRequests, setStaffLeaveRequests] = useState<StaffLeaveRequest[]>([]);
+  const [reviews, setReviews] = useState<ReviewItem[]>([]);
+  const [whatsappLogs, setWhatsappLogs] = useState<WhatsAppMessageLog[]>([]);
+  const [settings, setSettings] = useState<ResortDeskSettings>(initialSettingsData);
+  const [readNotificationIds, setReadNotificationIds] = useState<string[]>([]);
 
   // Modal toggle states
   const [showBookingModal, setShowBookingModal] = useState(false);
   const [showBillingModal, setShowBillingModal] = useState(false);
   const [showAiActionModal, setShowAiActionModal] = useState(false);
-  
-  // Custom toast notification banner state
+  const [isCollectingBilling, setIsCollectingBilling] = useState(false);
+  const [isDispatchingAi, setIsDispatchingAi] = useState(false);
+
+  // Toast banner state
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
-  // Selected billing detail for modal
-  const [billingDetail, setBillingDetail] = useState<{ name: string; amount: number; roomNumber?: string } | null>(null);
+  // Selected billing detail for dashboard quick collection modal
+  const [billingDetail, setBillingDetail] = useState<{
+    name: string;
+    amount: number;
+    roomNumber?: string;
+    bookingId?: string;
+  } | null>(null);
 
-  // Notifications count state
-  const [notificationsCount, setNotificationsCount] = useState(2);
-
-  // Quick reservation input form state
-  const [newBookingName, setNewBookingName] = useState('');
-  const [newBookingRoom, setNewBookingRoom] = useState('');
-  const [newBookingPrice, setNewBookingPrice] = useState('5500');
-
-  // Helper: Trigger custom transient toast notification
   const triggerToast = (msg: string) => {
     setToastMessage(msg);
     setTimeout(() => {
-      setToastMessage(null);
-    }, 4000);
+      setToastMessage((prev) => (prev === msg ? null : prev));
+    }, 4500);
+  };
+
+  // Subscribe to Firestore collections when connected
+  useEffect(() => {
+    if (firestoreStatus === 'checking') {
+      setDataLoading(true);
+      return;
+    }
+    if (firestoreStatus !== 'connected') {
+      setDataLoading(false);
+      return;
+    }
+
+    setDataLoading(true);
+    setFirestoreError(null);
+    let initialLoaded = 0;
+    const markOneLoaded = () => {
+      initialLoaded += 1;
+      if (initialLoaded >= 3) {
+        setDataLoading(false);
+      }
+    };
+
+    const handleSubError = (err: Error) => {
+      setFirestoreError(err.message);
+      setDataLoading(false);
+    };
+
+    const unsubs = [
+      subscribeBookings(
+        (list) => {
+          setBookings(list);
+          markOneLoaded();
+        },
+        handleSubError
+      ),
+      subscribeRooms(
+        (list) => {
+          setRooms(list);
+          markOneLoaded();
+        },
+        handleSubError
+      ),
+      subscribeGuests(
+        (list) => {
+          setGuestsCRM(list);
+          markOneLoaded();
+        },
+        handleSubError
+      ),
+      subscribeCollection<HousekeepingTask>('housekeepingTasks', setHousekeeping, handleSubError),
+      subscribeCollection<MaintenanceTicket>('maintenanceTickets', setMaintenanceTickets, handleSubError),
+      subscribeCollection<RoomCategory>('roomCategories', setCategories, handleSubError),
+      subscribeCollection<PropertyAmenity>('propertyAmenities', setPropertyAmenities, handleSubError),
+      subscribeBlockedDays(setBlockedDays, handleSubError),
+      subscribeCollection<BillingInvoice>('invoices', setInvoices, handleSubError),
+      subscribeCollection<InventoryItem>('inventoryItems', setInventoryItems, handleSubError),
+      subscribeCollection<StaffMember>('staffMembers', setStaffMembers, handleSubError),
+      subscribeCollection<StaffLeaveRequest>('staffLeaveRequests', setStaffLeaveRequests, handleSubError),
+      subscribeCollection<ReviewItem>('reviews', setReviews, handleSubError),
+      subscribeCollection<WhatsAppMessageLog>('whatsappLogs', setWhatsappLogs, handleSubError),
+      subscribeResortSettings(setSettings, handleSubError),
+      subscribeNotificationsReadState(setReadNotificationIds),
+    ];
+
+    const fallbackTimer = setTimeout(() => setDataLoading(false), 1800);
+    return () => {
+      clearTimeout(fallbackTimer);
+      unsubs.forEach((u) => u());
+    };
+  }, [firestoreStatus]);
+
+  // Seed Mykonos starter dataset on explicit click
+  const handleSeedStarterDataset = async () => {
+    setSeeding(true);
+    try {
+      await seedAllMykonosCollections();
+      await recheckFirestore();
+      triggerToast('Mykonos Cottage starter dataset initialized in Firestore.');
+    } catch (err: any) {
+      triggerToast(err?.message || 'Unable to initialize starter dataset in Firestore.');
+    } finally {
+      setSeeding(false);
+    }
   };
 
   // Navigate to module with optional pre-applied filter/search
@@ -146,7 +255,7 @@ export default function App() {
     if (tab === 'bookings') {
       setBookingsNavFilter({
         status: options?.bookingsStatus || 'All',
-        search: options?.bookingsSearch || ''
+        search: options?.bookingsSearch || '',
       });
     } else if (tab === 'housekeeping') {
       setHousekeepingNavFilter(options?.housekeepingFilter || 'All');
@@ -155,308 +264,701 @@ export default function App() {
     } else if (tab === 'billing') {
       setBillingNavFilter(options?.billingFilter || 'ALL');
     }
-    setNavFilterKey(prev => prev + 1);
+    setNavFilterKey((prev) => prev + 1);
     setActiveTab(tab);
     setIsMobileSidebarOpen(false);
   };
 
-  // Derived operational metrics from live component state
+  const todayISO = getTodayISO();
+
+  // Room categories synchronized with live RoomUnits count when available
+  const syncedCategories = useMemo(() => {
+    if (rooms.length === 0) return categories;
+    return categories.map((cat) => {
+      const matchedCount = rooms.filter(
+        (r) => r.categoryName.toLowerCase() === cat.name.toLowerCase()
+      ).length;
+      return matchedCount > 0 ? { ...cat, activeCount: matchedCount } : cat;
+    });
+  }, [categories, rooms]);
+
   const totalRooms = useMemo(() => {
+    if (rooms.length > 0) return rooms.length;
     return categories.reduce((sum, cat) => sum + cat.activeCount, 0);
-  }, [categories]);
+  }, [rooms, categories]);
 
-  const occupiedRooms = Math.round((totalRooms * stats.occupancyRate) / 100);
-  const vacantRoomsCount = Math.max(0, totalRooms - occupiedRooms);
+  // Today's occupancy derived strictly from active non-cancelled, non-checked-out bookings overlapping today
+  const occupiedRoomsCount = useMemo(() => {
+    const occupiedRoomKeys = new Set<string>();
+    bookings.forEach((b) => {
+      if (isBookingOccupyingDate(b, todayISO)) {
+        occupiedRoomKeys.add(b.roomId || b.roomNumber);
+      }
+    });
+    return Math.min(totalRooms || occupiedRoomKeys.size, occupiedRoomKeys.size);
+  }, [bookings, todayISO, totalRooms]);
 
-  const checkedInArrivalsCount = useMemo(() => {
-    return arrivals.filter(a => a.status === 'Checked In').length;
-  }, [arrivals]);
+  const occupancyRate = useMemo(() => {
+    if (totalRooms <= 0) return 0;
+    return Math.min(100, Math.round((occupiedRoomsCount / totalRooms) * 100));
+  }, [occupiedRoomsCount, totalRooms]);
 
-  const earliestPendingArrival = useMemo(() => {
-    return arrivals.find(a => a.status !== 'Checked In')?.checkInTime;
-  }, [arrivals]);
+  const vacantRoomsCount = Math.max(0, totalRooms - occupiedRoomsCount);
 
-  const clearedDeparturesCount = useMemo(() => {
-    return departures.filter(d => d.status === 'Checked Out').length;
-  }, [departures]);
+  // Derive Today's Arrivals from Firestore bookings
+  const arrivals: Arrival[] = useMemo(() => {
+    return bookings
+      .filter((b) => {
+        if (b.bookingStatus === 'Cancelled') return false;
+        const { checkInISO } = resolveBookingDatesISO(b);
+        return checkInISO === todayISO;
+      })
+      .map((b) => {
+        const adv = b.advancePaid ?? (b.paymentStatus === 'Paid' ? b.amount : 0);
+        const bal = Math.max(0, b.balanceDue ?? b.amount - adv);
+        const arrivalStatus: Arrival['status'] =
+          b.bookingStatus === 'Checked-in' || b.bookingStatus === 'Checked-out'
+            ? 'Checked In'
+            : b.arrivalTime
+            ? 'Arriving'
+            : 'Expected';
+        return {
+          id: b.id,
+          guestName: b.guestName,
+          roomNumber: b.roomNumber.replace(/^(Cottage|Villa|Suite|Room)\s+/i, ''),
+          status: arrivalStatus,
+          avatar:
+            b.avatar ||
+            b.guestName
+              .split(' ')
+              .map((n) => n[0])
+              .join('')
+              .toUpperCase()
+              .slice(0, 2),
+          phone: b.guestPhone,
+          checkInTime: b.arrivalTime || settings.profile.checkInTime || '02:00 PM',
+          bookingStatus: b.bookingStatus === 'Pending' ? 'Tentative' : 'Confirmed',
+          paymentStatus: bal === 0 ? 'Paid' : adv > 0 ? 'Partial' : 'Pending',
+          amountDue: bal,
+          nights: b.nights,
+          bookingId: b.id,
+        };
+      });
+  }, [bookings, todayISO, settings.profile.checkInTime]);
 
-  const pendingHousekeepingCount = useMemo(() => {
-    return housekeeping.filter(h => h.status !== 'Verified').length;
-  }, [housekeeping]);
+  // Derive Today's Departures from Firestore bookings
+  const departures: Departure[] = useMemo(() => {
+    return bookings
+      .filter((b) => {
+        if (b.bookingStatus === 'Cancelled') return false;
+        const { checkOutISO } = resolveBookingDatesISO(b);
+        return checkOutISO === todayISO;
+      })
+      .map((b) => {
+        const adv = b.advancePaid ?? (b.paymentStatus === 'Paid' ? b.amount : 0);
+        const bal = Math.max(0, b.balanceDue ?? b.amount - adv);
+        const isCheckedOut = b.bookingStatus === 'Checked-out';
+        return {
+          id: b.id,
+          guestName: b.guestName,
+          roomNumber: b.roomNumber.replace(/^(Cottage|Villa|Suite|Room)\s+/i, ''),
+          status: isCheckedOut ? 'Checked Out' : bal > 0 ? 'Pending' : 'Scheduled',
+          avatar:
+            b.avatar ||
+            b.guestName
+              .split(' ')
+              .map((n) => n[0])
+              .join('')
+              .toUpperCase()
+              .slice(0, 2),
+          checkoutTime: b.checkoutTime || settings.profile.checkOutTime || '11:00 AM',
+          amountDue: bal,
+          bookingStatus: isCheckedOut ? 'Completed' : 'Active',
+          paymentStatus: bal === 0 ? 'Paid' : 'Due',
+          bookingId: b.id,
+        };
+      });
+  }, [bookings, todayISO, settings.profile.checkOutTime]);
 
-  const urgentHousekeepingCount = useMemo(() => {
-    return housekeeping.filter(h => h.status !== 'Verified' && h.priority === 'Urgent').length;
-  }, [housekeeping]);
+  // Derive Revenue & Pending Balances without double counting between invoices & bookings
+  const { totalCollectedRevenue, totalPendingPayments, unconfirmedBookingsCount } = useMemo(() => {
+    const invoicedBookingIds = new Set<string>();
+    let collectedSum = 0;
+    let pendingSum = 0;
 
-  const unassignedHousekeepingCount = useMemo(() => {
-    return housekeeping.filter(h => h.status !== 'Verified' && !h.assignedTo).length;
-  }, [housekeeping]);
+    invoices.forEach((inv) => {
+      if (inv.bookingId) invoicedBookingIds.add(inv.bookingId);
+      if (inv.status !== 'Refunded') {
+        collectedSum += Number(inv.paidAmount) || 0;
+        pendingSum += Number(inv.dueAmount) || 0;
+      }
+    });
 
-  const openMaintenanceList = useMemo(() => {
-    return maintenance.filter(m => m.status !== 'Resolved');
-  }, [maintenance]);
+    let unconfirmedCount = 0;
+    bookings.forEach((b) => {
+      if (b.bookingStatus === 'Pending') unconfirmedCount += 1;
+      if (b.bookingStatus === 'Cancelled') return;
+      const matchesInvoice =
+        invoicedBookingIds.has(b.id) || (b.bookingCode ? invoicedBookingIds.has(b.bookingCode) : false);
+      if (!matchesInvoice) {
+        const adv = b.advancePaid ?? (b.paymentStatus === 'Paid' ? b.amount : 0);
+        const bal = Math.max(0, b.balanceDue ?? b.amount - adv);
+        collectedSum += adv;
+        pendingSum += bal;
+      }
+    });
 
+    return {
+      totalCollectedRevenue: Math.round(collectedSum),
+      totalPendingPayments: Math.round(pendingSum),
+      unconfirmedBookingsCount: unconfirmedCount,
+    };
+  }, [invoices, bookings]);
+
+  // 7-day trailing occupancy computed directly from bookings vs totalRooms
+  const occupancyHistory: OccupancyDay[] = useMemo(() => {
+    const days: OccupancyDay[] = [];
+    for (let offset = -6; offset <= 0; offset += 1) {
+      const iso = addDaysISO(todayISO, offset);
+      const dateObj = parseISODate(iso);
+      const dayLabel = dateObj.toLocaleDateString('en-IN', { weekday: 'short' });
+      const activeForDay = bookings.filter((b) => isBookingOccupyingDate(b, iso));
+      const uniqueRooms = new Set(activeForDay.map((b) => b.roomId || b.roomNumber)).size;
+      const rate = totalRooms > 0 ? Math.min(100, Math.round((uniqueRooms / totalRooms) * 100)) : 0;
+      days.push({
+        day: dayLabel,
+        rate,
+        bookings: activeForDay.length,
+      });
+    }
+    return days;
+  }, [bookings, todayISO, totalRooms]);
+
+  const stats: ResortStats = useMemo(
+    () => ({
+      occupancyRate,
+      occupancyGrowth: 0,
+      revenue: totalCollectedRevenue,
+      revenueGrowth: 0,
+      arrivalsTodayCount: arrivals.length,
+      departuresTodayCount: departures.length,
+      pendingPaymentsAmount: totalPendingPayments,
+    }),
+    [occupancyRate, totalCollectedRevenue, arrivals.length, departures.length, totalPendingPayments]
+  );
+
+  // Operational counts
+  const checkedInArrivalsCount = useMemo(
+    () => arrivals.filter((a) => a.status === 'Checked In').length,
+    [arrivals]
+  );
+  const earliestPendingArrival = useMemo(
+    () => arrivals.find((a) => a.status !== 'Checked In')?.checkInTime,
+    [arrivals]
+  );
+  const clearedDeparturesCount = useMemo(
+    () => departures.filter((d) => d.status === 'Checked Out').length,
+    [departures]
+  );
+  const pendingDeparturesWithBalance = useMemo(
+    () => departures.filter((d) => d.status !== 'Checked Out' && (d.amountDue || 0) > 0),
+    [departures]
+  );
+
+  const pendingHousekeepingCount = useMemo(
+    () => housekeeping.filter((h) => h.status !== 'Verified').length,
+    [housekeeping]
+  );
+  const urgentHousekeepingCount = useMemo(
+    () => housekeeping.filter((h) => h.status !== 'Verified' && h.priority === 'Urgent').length,
+    [housekeeping]
+  );
+  const unassignedHousekeepingCount = useMemo(
+    () => housekeeping.filter((h) => h.status !== 'Verified' && !h.assignedTo).length,
+    [housekeeping]
+  );
+
+  // Single canonical source for Maintenance across Dashboard, Sidebar, Housekeeping & Rooms
+  const canonicalMaintenanceAlerts: MaintenanceAlert[] = useMemo(() => {
+    return maintenanceTickets.map((t) => ({
+      id: t.id,
+      roomNumber: t.roomNumber,
+      title: t.title,
+      priority: t.priority === 'Emergency' || t.priority === 'High' ? 'High' : t.priority === 'Medium' ? 'Medium' : 'Low',
+      status: t.status === 'Closed' || t.status === 'Resolved' ? 'Resolved' : t.status === 'In Progress' ? 'In Progress' : 'Open',
+    }));
+  }, [maintenanceTickets]);
+
+  const openMaintenanceList = useMemo(
+    () => canonicalMaintenanceAlerts.filter((m) => m.status !== 'Resolved'),
+    [canonicalMaintenanceAlerts]
+  );
   const openMaintenanceCount = openMaintenanceList.length;
-
-  const highPriorityMaintenanceCount = useMemo(() => {
-    return openMaintenanceList.filter(m => m.priority === 'High').length;
-  }, [openMaintenanceList]);
-
+  const highPriorityMaintenanceCount = useMemo(
+    () => openMaintenanceList.filter((m) => m.priority === 'High').length,
+    [openMaintenanceList]
+  );
   const topMaintenanceLabel = openMaintenanceList[0]
     ? `${openMaintenanceList[0].roomNumber}: ${openMaintenanceList[0].title}`
     : undefined;
 
-  const pendingDeparturesWithBalance = useMemo(() => {
-    return departures.filter(d => d.status !== 'Checked Out' && (d.amountDue || 0) > 0);
-  }, [departures]);
+  // Sidebar badge counts derived strictly from Firestore collections
+  const inventoryAlertCount = useMemo(
+    () =>
+      inventoryItems.filter(
+        (i) => i.safetyLevel === 'Low' || i.safetyLevel === 'Critical' || i.safetyLevel === 'Out of Stock'
+      ).length,
+    [inventoryItems]
+  );
+  const staffAlertCount = useMemo(
+    () => staffLeaveRequests.filter((l) => l.status === 'Pending').length,
+    [staffLeaveRequests]
+  );
+  const reviewsAlertCount = useMemo(
+    () => reviews.filter((r) => r.status === 'Unreplied' || r.sentiment === 'Negative').length,
+    [reviews]
+  );
+  const whatsappPendingCount = useMemo(
+    () => whatsappLogs.filter((w) => w.status === 'Failed').length,
+    [whatsappLogs]
+  );
 
-  const unconfirmedBookingsCount = useMemo(() => {
-    return bookings.filter(b => b.bookingStatus === 'Pending').length;
-  }, [bookings]);
+  // Dynamic operational alerts for DashboardHeader
+  const operationalAlerts: OperationalHeaderAlert[] = useMemo(() => {
+    const list: OperationalHeaderAlert[] = [];
+    housekeeping
+      .filter((h) => h.status === 'Pending' && h.priority === 'Urgent')
+      .slice(0, 2)
+      .forEach((h) => {
+        const id = `alert-hk-${h.id}`;
+        list.push({
+          id,
+          text: `${h.roomNumber} (${h.type}) urgent turnover pending`,
+          time: h.completionTime || 'Housekeeping Queue',
+          unread: !readNotificationIds.includes(id),
+          tab: 'housekeeping',
+        });
+      });
 
-  // Handle: Confirm custom Walk-in Booking
-  const handleCreateWalkInBooking = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newBookingName || !newBookingRoom) return;
+    arrivals
+      .filter((a) => a.status !== 'Checked In')
+      .slice(0, 2)
+      .forEach((a) => {
+        const id = `alert-arr-${a.id}`;
+        list.push({
+          id,
+          text: `Arrival: ${a.guestName} (Cottage ${a.roomNumber}) at ${a.checkInTime}`,
+          time: 'Today Check-In',
+          unread: !readNotificationIds.includes(id),
+          tab: 'bookings',
+        });
+      });
 
-    const parsedPrice = parseFloat(newBookingPrice) || 5000;
+    maintenanceTickets
+      .filter((m) => m.status !== 'Closed' && (m.priority === 'Emergency' || m.priority === 'High'))
+      .slice(0, 2)
+      .forEach((m) => {
+        const id = `alert-mt-${m.id}`;
+        list.push({
+          id,
+          text: `${m.title} in ${m.roomNumber} (${m.priority})`,
+          time: m.reportedTime || 'Maintenance',
+          unread: !readNotificationIds.includes(id),
+          tab: 'maintenance',
+        });
+      });
 
-    // Create a new arrival record
-    const newArrival: Arrival = {
-      id: `arr-${Date.now()}`,
-      guestName: newBookingName,
-      roomNumber: newBookingRoom,
-      status: 'Expected',
-      avatar: newBookingName.split(' ').map(n => n[0]).join('').toUpperCase().substring(0, 2)
-    };
+    return list;
+  }, [housekeeping, arrivals, maintenanceTickets, readNotificationIds]);
 
-    setArrivals(prev => [newArrival, ...prev]);
+  const unreadNotificationsCount = useMemo(
+    () => operationalAlerts.filter((a) => a.unread).length,
+    [operationalAlerts]
+  );
 
-    // Create a matching booking record for Bookings timeline/crm
-    const matchedBooking: Booking = {
-      id: `b-${Date.now()}`,
-      guestName: newBookingName,
-      guestEmail: `${newBookingName.toLowerCase().replace(/\s+/g, '.')}@example.com`,
-      guestPhone: '+91 99123 45678',
-      roomNumber: `${newBookingRoom} Deluxe`,
-      roomType: `${newBookingRoom} Deluxe`,
-      roomCategory: 'King Bed',
-      startDate: 'Oct 14',
-      endDate: 'Oct 17',
-      nights: 3,
-      amount: parsedPrice,
+  // Handler: ArrivalsCard inline quick arrival -> persists as real Firestore Booking
+  const handleAddArrival = async (newArr: Omit<Arrival, 'id' | 'avatar'>) => {
+    if (firestoreStatus !== 'connected') {
+      openAuthModal();
+      triggerToast('Sign in to add arrivals to Firestore.');
+      return;
+    }
+
+    const cleanedRoomNo = newArr.roomNumber.trim().toLowerCase();
+    const matchedRoom =
+      rooms.find(
+        (r) =>
+          r.roomNumber.toLowerCase() === cleanedRoomNo ||
+          r.roomName.toLowerCase().includes(cleanedRoomNo)
+      ) || rooms[0];
+
+    if (!matchedRoom) {
+      triggerToast('No cottage units configured in Firestore yet. Initialize rooms first.');
+      return;
+    }
+
+    const checkInISO = todayISO;
+    const checkOutISO = addDaysISO(todayISO, 1);
+    const total = Math.round(matchedRoom.ratePerNight * 1.12);
+    const adv = newArr.paymentStatus === 'Paid' ? total : newArr.paymentStatus === 'Partial' ? Math.round(total * 0.5) : 0;
+
+    const bookingPayload: Booking = {
+      id: `bk-${Date.now()}`,
+      guestName: newArr.guestName.trim(),
+      guestEmail: '',
+      guestPhone: newArr.phone || '',
+      roomId: matchedRoom.id,
+      roomNumber: matchedRoom.roomName,
+      roomType: matchedRoom.subtitle,
+      roomCategory: matchedRoom.categoryName,
+      checkInDateISO: checkInISO,
+      checkOutDateISO: checkOutISO,
+      startDate: formatShortDate(checkInISO),
+      endDate: formatShortDate(checkOutISO),
+      nights: 1,
+      adults: 2,
+      children: 0,
+      mealPlan: 'Room Only',
+      source: 'Direct Walk-in / Phone',
+      arrivalTime: newArr.checkInTime || '02:00 PM',
+      checkoutTime: settings.profile.checkOutTime || '11:00 AM',
+      amount: total,
+      advancePaid: adv,
+      balanceDue: Math.max(0, total - adv),
       bookingStatus: 'Confirmed',
-      paymentStatus: 'Unpaid',
-      avatar: newBookingName.split(' ').map(n => n[0]).join('').toUpperCase().substring(0, 2),
+      paymentStatus: adv >= total ? 'Paid' : adv > 0 ? 'Partial' : 'Unpaid',
+      avatar: newArr.guestName
+        .split(' ')
+        .map((n) => n[0])
+        .join('')
+        .toUpperCase()
+        .slice(0, 2),
       membership: 'Regular Guest',
-      totalSpend: parsedPrice,
-      avgDailyRate: parsedPrice,
-      notes: [
-        "Created via walk-in desk manager.",
-        "Expected early evening check-in on Mon Oct 14."
-      ],
-      preferences: ["Deluxe Cottage Room", "Walk-in Guest"],
+      totalSpend: total,
+      avgDailyRate: matchedRoom.ratePerNight,
+      notes: ['Scheduled via Dashboard Quick Arrival form.'],
+      preferences: [],
       stayHistory: [],
       invoice: {
-        invoiceNumber: `KR-2023-${Math.floor(1000 + Math.random() * 9000)}`,
-        date: 'October 14, 2023',
+        invoiceNumber: `${settings.billingGst.invoicePrefix.replace(/\/$/, '')}-${Math.floor(1000 + Math.random() * 9000)}`,
+        date: formatFullDate(checkInISO),
         items: [
-          { description: `${newBookingRoom} Deluxe cottage accommodation`, qty: 3, price: Math.round(parsedPrice / 3), amount: parsedPrice }
+          {
+            description: `${matchedRoom.roomName} (${matchedRoom.categoryName})`,
+            qty: 1,
+            price: matchedRoom.ratePerNight,
+            amount: matchedRoom.ratePerNight,
+          },
         ],
-        subtotal: parsedPrice,
-        cgst: Math.round(parsedPrice * 0.09),
-        sgst: Math.round(parsedPrice * 0.09),
-        total: Math.round(parsedPrice * 1.18)
-      }
-    };
-    setBookings(prev => [matchedBooking, ...prev]);
-
-    // Update resort stats dynamically
-    setStats(prev => {
-      const nextOccupancy = Math.min(100, prev.occupancyRate + 3);
-      return {
-        ...prev,
-        arrivalsTodayCount: prev.arrivalsTodayCount + 1,
-        occupancyRate: nextOccupancy,
-        revenue: prev.revenue + parsedPrice,
-        revenueGrowth: prev.revenueGrowth + 1
-      };
-    });
-
-    // Update occupancy history with fresh active rates
-    setOccupancyHistory(prev => {
-      return prev.map((day, idx) => {
-        if (idx === prev.length - 1) { // Update Sunday (today)
-          return { ...day, rate: Math.min(100, day.rate + 3), bookings: day.bookings + 1 };
-        }
-        return day;
-      });
-    });
-
-    // Reset inputs & close
-    setNewBookingName('');
-    setNewBookingRoom('');
-    setShowBookingModal(false);
-    triggerToast(`Booking successfully added for ${newBookingName} (Room ${newBookingRoom})`);
-  };
-
-  // Handle adding arrival from the card form
-  const handleAddArrival = (newArr: Omit<Arrival, 'id' | 'avatar'>) => {
-    const fresh: Arrival = {
-      ...newArr,
-      id: `arr-${Date.now()}`,
-      avatar: newArr.guestName.split(' ').map(n => n[0]).join('').toUpperCase().substring(0, 2)
+        subtotal: matchedRoom.ratePerNight,
+        cgst: Math.round((total - matchedRoom.ratePerNight) / 2),
+        sgst: total - matchedRoom.ratePerNight - Math.round((total - matchedRoom.ratePerNight) / 2),
+        total,
+      },
     };
 
-    setArrivals(prev => [fresh, ...prev]);
-
-    // Dynamic stat adjustments
-    setStats(prev => ({
-      ...prev,
-      arrivalsTodayCount: prev.arrivalsTodayCount + 1,
-      occupancyRate: Math.min(100, prev.occupancyRate + 2)
-    }));
-
-    triggerToast(`Arrival scheduled for ${newArr.guestName} in Room ${newArr.roomNumber}`);
+    try {
+      await createReservationAtomic(bookingPayload, matchedRoom);
+      triggerToast(`Booking created in Firestore for ${newArr.guestName} (${matchedRoom.roomName}).`);
+    } catch (err: any) {
+      triggerToast(err?.message || 'Could not save arrival booking.');
+    }
   };
 
-  // Handle: Guest Check-In Action
-  const handleCheckInGuest = (id: string) => {
-    const target = arrivals.find(item => item.id === id);
-    if (!target || target.status === 'Checked In') return;
-
-    setArrivals(prev => prev.map(item =>
-      item.id === id ? { ...item, status: 'Checked In' } : item
-    ));
-    triggerToast(`Checked In: ${target.guestName} to Cottage ${target.roomNumber}`);
-
-    setStats(prev => ({
-      ...prev,
-      revenue: prev.revenue + 5500,
-      revenueGrowth: prev.revenueGrowth + 2
-    }));
+  // Handler: Guest Check-In Action -> Firestore
+  const handleCheckInGuest = async (bookingId: string) => {
+    const targetBooking = bookings.find((b) => b.id === bookingId);
+    if (!targetBooking) return;
+    try {
+      await checkInBookingInFirestore(targetBooking);
+      triggerToast(`Checked In: ${targetBooking.guestName} (${targetBooking.roomNumber}).`);
+    } catch (err: any) {
+      triggerToast(err?.message || 'Check-in failed.');
+    }
   };
 
-  // Handle: Guest Check-Out Action
-  const handleCheckOutGuest = (id: string) => {
-    const target = departures.find(item => item.id === id);
-    if (!target || target.status === 'Checked Out') return;
-
-    setDepartures(prev => prev.map(item =>
-      item.id === id ? { ...item, status: 'Checked Out', bookingStatus: 'Completed' } : item
-    ));
-    triggerToast(`Checked Out: ${target.guestName} from Cottage ${target.roomNumber}`);
+  // Handler: Guest Check-Out Action -> Firestore + auto housekeeping task
+  const handleCheckOutGuest = async (bookingId: string) => {
+    const targetBooking = bookings.find((b) => b.id === bookingId);
+    if (!targetBooking) return;
+    try {
+      await checkOutBookingInFirestore(targetBooking);
+      triggerToast(`Checked Out: ${targetBooking.guestName}. Housekeeping turnover queued.`);
+    } catch (err: any) {
+      triggerToast(err?.message || 'Check-out failed.');
+    }
   };
 
-  // Handle: AI Assistant "Take Action" (resolves priority housekeeping alerts)
-  const handleAiAutoResolveHousekeeping = () => {
-    setShowAiActionModal(true);
-  };
-
-  const confirmAiHousekeepingClean = () => {
-    setHousekeeping(prev =>
-      prev.map(task =>
-        task.status === 'Pending' || task.status === 'In Progress'
-          ? { ...task, status: 'Cleaned', assignedTo: task.assignedTo || 'Ramesh Singh' }
-          : task
-      )
+  // Handler: AI Assistant Housekeeping Queue Dispatch -> Firestore
+  const confirmAiHousekeepingClean = async () => {
+    const targets = housekeeping.filter(
+      (t) => t.status === 'Pending' || t.status === 'In Progress'
     );
-    triggerToast("Housekeeping dispatch confirmed: priority room turnovers updated.");
-    setShowAiActionModal(false);
+    if (targets.length === 0) {
+      setShowAiActionModal(false);
+      return;
+    }
+    setIsDispatchingAi(true);
+    try {
+      const updated = targets.map((task) => ({
+        ...task,
+        status: 'Cleaned' as const,
+        assignedTo: task.assignedTo || staffMembers[0]?.name || 'Ramesh Singh',
+      }));
+      await batchUpdateHousekeepingTasks(updated);
+      triggerToast(`${updated.length} housekeeping room turnovers marked Cleaned in Firestore.`);
+      setShowAiActionModal(false);
+    } catch (err: any) {
+      triggerToast(err?.message || 'Failed updating housekeeping tasks.');
+    } finally {
+      setIsDispatchingAi(false);
+    }
   };
 
-  // Handle: Review guest bill from Pending Payments / Departures
+  // Handler: Review guest bill from Pending Payments / Departures
   const handleReviewBilling = (name: string, amount: number) => {
-    const matchedDeparture = departures.find(d => d.guestName === name);
+    const matchedBooking = bookings.find(
+      (b) =>
+        b.bookingStatus !== 'Cancelled' &&
+        b.guestName.toLowerCase() === name.toLowerCase() &&
+        (b.balanceDue ?? 0) > 0
+    );
     setBillingDetail({
       name,
-      amount,
-      roomNumber: matchedDeparture ? `Cottage ${matchedDeparture.roomNumber}` : 'Pending Folios'
+      amount: matchedBooking?.balanceDue ?? amount,
+      roomNumber: matchedBooking?.roomNumber || 'Pending Folios',
+      bookingId: matchedBooking?.id,
     });
     setShowBillingModal(true);
   };
 
-  const handleClearNotifications = () => {
-    setNotificationsCount(0);
-    triggerToast("All notifications marked as read.");
+  const handleConfirmDashboardCollection = async () => {
+    if (!billingDetail) return;
+    const booking = billingDetail.bookingId
+      ? bookings.find((b) => b.id === billingDetail.bookingId)
+      : undefined;
+
+    if (!booking) {
+      setShowBillingModal(false);
+      setBillingDetail(null);
+      navigateToModule('billing', { billingFilter: 'Pending' });
+      return;
+    }
+
+    setIsCollectingBilling(true);
+    try {
+      await recordBookingPaymentAtomic(
+        booking.id,
+        billingDetail.amount,
+        'UPI / GPay',
+        `DESK-${Date.now().toString().slice(-6)}`,
+        'Settlement'
+      );
+      triggerToast(
+        `Collected ₹${billingDetail.amount.toLocaleString('en-IN')} for ${booking.guestName}.`
+      );
+      setShowBillingModal(false);
+      setBillingDetail(null);
+    } catch (err: any) {
+      triggerToast(err?.message || 'Payment collection failed.');
+    } finally {
+      setIsCollectingBilling(false);
+    }
   };
 
-  // Dynamic filter lists based on Search Query
+  const handleClearNotifications = async () => {
+    const allIds = operationalAlerts.map((a) => a.id);
+    if (allIds.length === 0) return;
+    setReadNotificationIds(allIds);
+    try {
+      await markNotificationsReadInFirestore(allIds);
+      triggerToast('All notifications marked as read.');
+    } catch {
+      // local read state already updated
+    }
+  };
+
+  // Filter Dashboard arrivals & departures by top search query
   const filteredArrivals = useMemo(() => {
     if (!searchQuery) return arrivals;
-    const query = searchQuery.toLowerCase();
-    return arrivals.filter(arr => 
-      arr.guestName.toLowerCase().includes(query) || 
-      arr.roomNumber.includes(query)
+    const q = searchQuery.toLowerCase();
+    return arrivals.filter(
+      (arr) => arr.guestName.toLowerCase().includes(q) || arr.roomNumber.toLowerCase().includes(q)
     );
   }, [arrivals, searchQuery]);
 
   const filteredDepartures = useMemo(() => {
     if (!searchQuery) return departures;
-    const query = searchQuery.toLowerCase();
-    return departures.filter(dep => 
-      dep.guestName.toLowerCase().includes(query) || 
-      dep.roomNumber.includes(query)
+    const q = searchQuery.toLowerCase();
+    return departures.filter(
+      (dep) => dep.guestName.toLowerCase().includes(q) || dep.roomNumber.toLowerCase().includes(q)
     );
   }, [departures, searchQuery]);
 
+  const showEmptyStarterBanner =
+    firestoreStatus === 'connected' && !dataLoading && rooms.length === 0 && bookings.length === 0;
+
   return (
-    <div id="resortdesk-container" className="flex h-screen bg-slate-100 overflow-hidden text-slate-800 font-sans">
-      
+    <div
+      id="resortdesk-container"
+      className="flex h-screen bg-slate-100 overflow-hidden text-slate-800 font-sans"
+    >
       {/* Toast banner notifications */}
       {toastMessage && (
-        <div id="toast-banner" className="fixed top-6 left-1/2 -translate-x-1/2 z-50 bg-teal-950 text-white font-semibold text-xs px-5 py-3 rounded-2xl shadow-xl border border-teal-800 flex items-center gap-2 max-w-[calc(100vw-2rem)] animate-in fade-in slide-in-from-top-4 duration-300">
+        <div
+          id="toast-banner"
+          className="fixed top-6 left-1/2 -translate-x-1/2 z-50 bg-teal-950 text-white font-semibold text-xs px-5 py-3 rounded-2xl shadow-xl border border-teal-800 flex items-center gap-2 max-w-[calc(100vw-2rem)] animate-in fade-in slide-in-from-top-4 duration-300"
+        >
           <Sparkles className="w-4 h-4 text-amber-400 shrink-0" />
           <span>{toastMessage}</span>
         </div>
       )}
 
-      {/* Sidebar navigation (Desktop static + Mobile drawer) */}
-      <Sidebar 
-        activeTab={activeTab} 
-        setActiveTab={(tab) => navigateToModule(tab)} 
-        branding={resortDetails.branding}
+      {/* Sidebar navigation */}
+      <Sidebar
+        activeTab={activeTab}
+        setActiveTab={(tab) => navigateToModule(tab)}
+        branding={settings.profile.propertyName || resortDetails.branding}
         housekeepingCount={pendingHousekeepingCount}
         maintenanceCount={openMaintenanceCount}
+        inventoryAlertCount={inventoryAlertCount}
+        staffAlertCount={staffAlertCount}
+        reviewsAlertCount={reviewsAlertCount}
+        whatsappCount={whatsappPendingCount}
         isMobileOpen={isMobileSidebarOpen}
         onCloseMobile={() => setIsMobileSidebarOpen(false)}
       />
 
       {/* Main Content Pane */}
       <div className="flex-1 flex flex-col h-full min-w-0 overflow-hidden">
-        
-        {/* Top Header */}
-        <DashboardHeader 
+        <DashboardHeader
           searchQuery={searchQuery}
           setSearchQuery={setSearchQuery}
-          notificationsCount={notificationsCount}
+          notificationsCount={unreadNotificationsCount}
+          alerts={operationalAlerts}
+          onAlertClick={(tab) => {
+            if (tab) navigateToModule(tab);
+          }}
           onClearNotifications={handleClearNotifications}
           onOpenSettings={() => navigateToModule('settings')}
           onToggleMobileMenu={() => setIsMobileSidebarOpen(true)}
+          propertyName={settings.profile.propertyName || resortDetails.name}
+          propertyLocation={`${settings.profile.city || 'Tarkarli'}, Malvan`}
+          firestoreStatus={firestoreStatus}
+          staffLabel={user ? user.displayName || user.email?.split('@')[0] || 'Staff' : null}
+          onOpenAuthModal={openAuthModal}
         />
 
         {/* Dynamic Navigation Content */}
         <div className="flex-1 overflow-y-auto overflow-x-hidden p-4 sm:p-6 lg:p-8">
+          {/* Global Firestore Permission / Error Banners */}
+          {firestoreStatus === 'permission-denied' && (
+            <div className="max-w-7xl mx-auto mb-5 bg-amber-50 border border-amber-200 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex items-start gap-2.5">
+                <ShieldAlert className="w-5 h-5 text-amber-700 shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-xs font-bold text-amber-950">
+                    Staff Authentication Required for Cloud Firestore (`resortdesk-mykonos`)
+                  </p>
+                  <p className="text-[11px] text-amber-800 mt-0.5">
+                    {firestoreMessage ||
+                      'Firestore security rules require an authenticated staff session to read and write property records.'}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={openAuthModal}
+                className="px-4 py-2 bg-teal-900 hover:bg-teal-950 text-white text-xs font-bold rounded-xl shrink-0 cursor-pointer"
+              >
+                Staff Sign In
+              </button>
+            </div>
+          )}
+
+          {firestoreError && firestoreStatus === 'connected' && (
+            <div className="max-w-7xl mx-auto mb-5 bg-rose-50 border border-rose-200 rounded-2xl p-4 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2 text-xs text-rose-800 font-semibold">
+                <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                <span>Firestore listener error: {firestoreError}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => void recheckFirestore()}
+                className="px-3 py-1.5 bg-white border border-rose-200 text-rose-700 text-xs font-bold rounded-lg cursor-pointer"
+              >
+                Retry
+              </button>
+            </div>
+          )}
+
+          {showEmptyStarterBanner && (
+            <div className="max-w-7xl mx-auto mb-5 bg-teal-50 border border-teal-200 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex items-start gap-2.5">
+                <Database className="w-5 h-5 text-teal-800 shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-xs font-bold text-teal-950">
+                    Firestore Connected — Mykonos Cottage Database is Currently Empty
+                  </p>
+                  <p className="text-[11px] text-teal-800 mt-0.5">
+                    Initialize the 7 cottages (101–105, Villa 201, Suite 301), sample reservations, housekeeping, maintenance, staff, inventory &amp; settings collections.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                disabled={seeding}
+                onClick={() => void handleSeedStarterDataset()}
+                className="px-4 py-2 bg-teal-800 hover:bg-teal-900 disabled:opacity-60 text-white text-xs font-bold rounded-xl shrink-0 flex items-center gap-1.5 cursor-pointer"
+              >
+                {seeding ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>Initializing...</span>
+                  </>
+                ) : (
+                  <span>Initialize Starter Data</span>
+                )}
+              </button>
+            </div>
+          )}
+
           {activeTab === 'dashboard' ? (
             <div className="flex flex-col gap-6 max-w-7xl mx-auto">
-              
               {/* Morning Overview Banner Title */}
-              <div id="dashboard-title-area" className="flex flex-col sm:flex-row sm:items-end justify-between gap-2">
+              <div
+                id="dashboard-title-area"
+                className="flex flex-col sm:flex-row sm:items-end justify-between gap-2"
+              >
                 <div>
                   <h2 className="text-2xl sm:text-3xl font-bold font-serif text-teal-950 tracking-tight leading-none">
                     Morning Overview
                   </h2>
                   <p className="text-slate-500 text-xs sm:text-sm mt-2 font-medium">
-                    Daily front-desk &amp; property summary for <span className="font-bold text-teal-800">{resortDetails.name}</span>, {resortDetails.location}.
+                    Daily front-desk &amp; property summary for{' '}
+                    <span className="font-bold text-teal-800">
+                      {settings.profile.propertyName || resortDetails.name}
+                    </span>
+                    , {settings.profile.city || 'Tarkarli'}, {settings.profile.state || 'Maharashtra'}.
                   </p>
                 </div>
-                <span className="self-start sm:self-auto text-[10px] font-semibold text-slate-500 bg-white px-2.5 py-1 rounded-full border border-slate-200/80">
-                  Sample Session Data • Firestore sync pending
+                <span
+                  className={`self-start sm:self-auto text-[10px] font-semibold px-2.5 py-1 rounded-full border ${
+                    firestoreStatus === 'connected'
+                      ? 'text-emerald-700 bg-emerald-50 border-emerald-200'
+                      : 'text-amber-800 bg-amber-50 border-amber-200'
+                  }`}
+                >
+                  {dataLoading
+                    ? 'Connecting to Firestore...'
+                    : firestoreStatus === 'connected'
+                    ? `Live Firestore • ${bookings.length} Bookings`
+                    : 'Sign in required for Firestore'}
                 </span>
               </div>
 
               {/* 4 Clickable Stat Cards Row */}
-              <StatsGrid 
+              <StatsGrid
                 stats={stats}
                 totalRooms={totalRooms}
                 checkedInArrivals={checkedInArrivalsCount}
@@ -466,7 +968,7 @@ export default function App() {
               />
 
               {/* Compact Today's Operations Hub */}
-              <TodayOperationsSection 
+              <TodayOperationsSection
                 pendingHousekeepingCount={pendingHousekeepingCount}
                 urgentHousekeepingCount={urgentHousekeepingCount}
                 openMaintenanceCount={openMaintenanceCount}
@@ -478,40 +980,48 @@ export default function App() {
                 vacantRoomsCount={vacantRoomsCount}
                 unconfirmedBookingsCount={unconfirmedBookingsCount}
                 onNavigateModule={navigateToModule}
+                isLiveFirestore={firestoreStatus === 'connected'}
               />
 
               {/* Lower Section Grid Layout */}
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
-                
-                {/* Left Columns (Occupies 2 columns on desktop): Arrivals + Departures */}
                 <div className="lg:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-6 min-w-0">
-                  {/* Today's Arrivals */}
-                  <ArrivalsCard 
+                  <ArrivalsCard
                     arrivals={filteredArrivals}
-                    onAddArrival={handleAddArrival}
-                    onCheckIn={handleCheckInGuest}
-                    onViewBooking={(guestName) => navigateToModule('bookings', { bookingsSearch: guestName })}
+                    onAddArrival={(newArr) => {
+                      void handleAddArrival(newArr);
+                    }}
+                    onCheckIn={(id) => {
+                      void handleCheckInGuest(id);
+                    }}
+                    onViewBooking={(guestName) =>
+                      navigateToModule('bookings', { bookingsSearch: guestName })
+                    }
                     onNavigateToBookings={() => navigateToModule('bookings')}
                   />
 
-                  {/* Today's Departures */}
-                  <DeparturesCard 
+                  <DeparturesCard
                     departures={filteredDepartures}
-                    onCheckOut={handleCheckOutGuest}
+                    onCheckOut={(id) => {
+                      void handleCheckOutGuest(id);
+                    }}
                     onReviewBilling={(name, amt) => handleReviewBilling(name, amt)}
-                    onViewBooking={(guestName) => navigateToModule('bookings', { bookingsSearch: guestName })}
+                    onViewBooking={(guestName) =>
+                      navigateToModule('bookings', { bookingsSearch: guestName })
+                    }
                     onNavigateToBookings={() => navigateToModule('bookings')}
                   />
                 </div>
 
-                {/* Right Column Stack */}
                 <div className="flex flex-col gap-6 min-w-0">
-                  {/* 7-Day Occupancy Chart */}
-                  <OccupancyChart history={occupancyHistory} totalRooms={totalRooms} />
+                  <OccupancyChart
+                    history={occupancyHistory}
+                    totalRooms={totalRooms}
+                    isLiveFirestore={firestoreStatus === 'connected'}
+                  />
 
-                  {/* Pending Payments Widget */}
-                  <PendingPaymentsCard 
-                    amount={stats.pendingPaymentsAmount} 
+                  <PendingPaymentsCard
+                    amount={stats.pendingPaymentsAmount}
                     onReview={() => {
                       const firstDue = pendingDeparturesWithBalance[0];
                       if (firstDue && firstDue.amountDue) {
@@ -522,138 +1032,156 @@ export default function App() {
                     }}
                   />
 
-                  {/* ResortDesk AI Operations Assistant */}
-                  <AIDeskCard 
+                  <AIDeskCard
                     arrivals={arrivals}
                     departures={departures}
                     housekeeping={housekeeping}
-                    maintenance={maintenance}
+                    maintenance={canonicalMaintenanceAlerts}
                     bookings={bookings}
-                    onTakeAction={handleAiAutoResolveHousekeeping}
+                    onTakeAction={() => setShowAiActionModal(true)}
                     onNewBookingClick={() => setShowBookingModal(true)}
                     onNavigateModule={navigateToModule}
                     onReviewBilling={(name, amt) => handleReviewBilling(name, amt)}
                   />
                 </div>
-
               </div>
 
-              {/* Property Overview Card positioned below all operational information */}
-              <PulseCard 
-                propertyName={resortDetails.name}
-                location={resortDetails.location}
-                address={resortDetails.address}
-                checkInTime={resortDetails.checkInTime}
-                checkOutTime={resortDetails.checkOutTime}
+              <PulseCard
+                propertyName={settings.profile.propertyName || resortDetails.name}
+                location={`${settings.profile.city || 'Tarkarli'}, Malvan`}
+                address={settings.profile.registeredAddress || resortDetails.address}
+                checkInTime={settings.profile.checkInTime || resortDetails.checkInTime}
+                checkOutTime={settings.profile.checkOutTime || resortDetails.checkOutTime}
               />
-
             </div>
           ) : activeTab === 'rooms' ? (
-            <RoomsView 
-              categories={categories}
+            <RoomsView
+              categories={syncedCategories}
+              rooms={rooms}
               amenities={propertyAmenities}
-              maintenance={roomMaintenance}
-              onUpdateCategory={(updated) => {
-                setCategories(prev => prev.map(c => c.id === updated.id ? updated : c));
-                triggerToast(`Pricing rates updated successfully for ${updated.name}`);
+              maintenanceTickets={maintenanceTickets}
+              blockedDays={blockedDays}
+              onUpdateCategory={async (updated) => {
+                await upsertCollectionDoc('roomCategories', updated);
+                triggerToast(`Pricing rates updated in Firestore for ${updated.name}`);
               }}
-              onUpdateAmenity={(updated) => {
-                setPropertyAmenities(prev => prev.map(a => a.id === updated.id ? updated : a));
+              onAddCategory={async (newC) => {
+                await upsertCollectionDoc('roomCategories', newC);
+                triggerToast(`New category ${newC.name} saved to Firestore!`);
+              }}
+              onUpdateAmenity={async (updated) => {
+                await upsertCollectionDoc('propertyAmenities', updated);
                 triggerToast(`${updated.name} amenity status set to ${updated.status}`);
               }}
-              onAddAmenity={(newA) => {
-                setPropertyAmenities(prev => [...prev, newA]);
-                triggerToast(`Custom property amenity ${newA.name} added!`);
+              onAddAmenity={async (newA) => {
+                await upsertCollectionDoc('propertyAmenities', newA);
+                triggerToast(`Property amenity ${newA.name} added to Firestore!`);
               }}
-              onUpdateMaintenance={(updated) => {
-                setRoomMaintenance(prev => prev.map(m => m.id === updated.id ? updated : m));
-                triggerToast(`Maintenance alert status updated!`);
+              onUpdateRoomStatus={async (roomId, status, note) => {
+                await updateRoomStatusInFirestore(roomId, status, note);
+                triggerToast(`Room status updated to ${status}`);
               }}
-              onAddCategory={(newC) => {
-                setCategories(prev => [...prev, newC]);
-                triggerToast(`New category segment ${newC.name} created!`);
+              onSaveBlockedDays={async (nextDays) => {
+                await saveBlockedDays(nextDays);
+                triggerToast(`Inventory calendar updated (${nextDays.length} blocked dates saved).`);
               }}
-              onAddMaintenance={(newM) => {
-                setRoomMaintenance(prev => [...prev, newM]);
-                triggerToast(`Maintenance log entered for ${newM.roomNumber}`);
-              }}
+              onOpenMaintenanceModule={() => navigateToModule('maintenance')}
+              triggerToast={triggerToast}
             />
           ) : activeTab === 'inventory' ? (
-            <InventoryView />
+            <InventoryView triggerToast={triggerToast} />
           ) : activeTab === 'staff' ? (
-            <StaffManagementView />
+            <StaffManagementView triggerToast={triggerToast} />
           ) : activeTab === 'whatsapp' ? (
-            <WhatsAppAutomationView />
+            <WhatsAppAutomationView triggerToast={triggerToast} />
           ) : activeTab === 'reviews' ? (
-            <ReviewsManagementView 
-              onNavigateToMaintenance={() => setActiveTab('maintenance')}
-              onNavigateToStaff={() => setActiveTab('staff')}
+            <ReviewsManagementView
+              onNavigateToMaintenance={() => navigateToModule('maintenance')}
+              onNavigateToStaff={() => navigateToModule('staff')}
+              triggerToast={triggerToast}
             />
           ) : activeTab === 'guests' ? (
-            <GuestsCRMView 
+            <GuestsCRMView
               guests={guestsCRM}
-              onUpdateGuest={handleUpdateGuestCRM}
-              onAddGuest={handleAddGuestCRM}
+              bookings={bookings}
+              invoices={invoices}
+              onUpdateGuest={async (updated) => {
+                await upsertCollectionDoc('guests', updated);
+                triggerToast(`CRM profile updated in Firestore for ${updated.name}`);
+              }}
+              onAddGuest={async (newGuest) => {
+                const saved = await createOrMergeGuestCRM(newGuest);
+                triggerToast(`Guest profile saved to Firestore for ${saved.name}`);
+              }}
+              triggerToast={triggerToast}
             />
           ) : activeTab === 'billing' ? (
-            <BillingView 
-              triggerToast={triggerToast} 
+            <BillingView
+              invoices={invoices}
+              bookings={bookings}
+              rooms={rooms}
+              settings={settings}
+              triggerToast={triggerToast}
               initialStatusFilter={billingNavFilter}
               navigationKey={navFilterKey}
             />
           ) : activeTab === 'settings' ? (
-            <SettingsView 
+            <SettingsView
+              settings={settings}
+              onSaveSettings={async (nextSettings) => {
+                await saveResortSettings(nextSettings);
+                setSettings(nextSettings);
+              }}
               onNavigateToBilling={() => navigateToModule('billing')}
               triggerToast={triggerToast}
             />
           ) : activeTab === 'bookings' ? (
-            <BookingsView 
+            <BookingsView
               bookings={bookings}
-              onAddBooking={(newB) => {
-                setBookings(prev => [newB, ...prev]);
-                triggerToast(`Booking successfully added for ${newB.guestName}`);
-              }}
-              onUpdateBooking={(updatedB) => {
-                setBookings(prev => prev.map(b => b.id === updatedB.id ? updatedB : b));
-                triggerToast(`Preference profile updated for ${updatedB.guestName}`);
-              }}
-              onOpenBookingModal={() => setShowBookingModal(true)}
+              rooms={rooms}
+              guests={guestsCRM}
+              loading={dataLoading}
+              errorMsg={firestoreError}
+              onSeedStarterData={handleSeedStarterDataset}
+              onNavigateTab={(tab) => navigateToModule(tab)}
+              onOpenMobileDrawer={() => setIsMobileSidebarOpen(true)}
+              triggerToast={triggerToast}
               initialStatusFilter={bookingsNavFilter.status}
               initialSearchQuery={bookingsNavFilter.search}
               navigationKey={navFilterKey}
             />
           ) : activeTab === 'housekeeping' ? (
-            <HousekeepingView 
+            <HousekeepingView
               tasks={housekeeping}
-              onUpdateTasks={setHousekeeping}
+              rooms={rooms}
+              staffMembers={staffMembers}
+              openMaintenanceCount={openMaintenanceCount}
+              onSaveTask={async (updatedTask) => {
+                await saveHousekeepingTaskAndSyncRoom(updatedTask, rooms);
+              }}
+              onNavigateMaintenance={() => navigateToModule('maintenance')}
               triggerToast={triggerToast}
               initialFilter={housekeepingNavFilter}
               navigationKey={navFilterKey}
             />
           ) : activeTab === 'maintenance' || activeTab === 'reports' ? (
-            <MaintenanceView 
+            <MaintenanceView
+              tickets={maintenanceTickets}
+              rooms={rooms}
               initialFilter={maintenanceNavFilter}
               navigationKey={navFilterKey}
+              triggerToast={triggerToast}
             />
           ) : (
-            // Placeholder view for other modules
             <div className="max-w-3xl mx-auto bg-white border border-slate-200 p-8 rounded-3xl shadow-sm text-center py-20 flex flex-col items-center gap-4">
               <div className="p-4 bg-teal-50 text-teal-800 rounded-full">
                 <Layers className="w-8 h-8" />
               </div>
               <h3 className="text-xl font-bold text-slate-800 capitalize">{activeTab} Module</h3>
-              <p className="text-slate-500 text-sm max-w-md">
-                You are currently viewing the placeholder shell for the <strong>{activeTab}</strong> management interface. 
-                As requested, we are building 1 module at a time. ResortDesk AI is fully structured to activate this system block in the next sequence!
-              </p>
-              <div className="flex items-center gap-2 mt-2">
-                <span className="px-2.5 py-1 bg-teal-50 text-teal-800 text-[10px] font-bold rounded-full uppercase tracking-wider border border-teal-100">
-                  Ready for Module Integration
-                </span>
-              </div>
               <button
+                type="button"
                 onClick={() => setActiveTab('dashboard')}
-                className="mt-6 px-4 py-2 bg-teal-800 text-white rounded-xl text-xs font-semibold hover:bg-teal-900 transition-colors"
+                className="mt-4 px-4 py-2 bg-teal-800 text-white rounded-xl text-xs font-semibold hover:bg-teal-900 transition-colors cursor-pointer"
               >
                 Return to Dashboard
               </button>
@@ -662,89 +1190,21 @@ export default function App() {
         </div>
       </div>
 
-      {/* MODAL 1: WALK-IN / NEW BOOKING */}
+      {/* Staff Firebase Authentication Modal */}
+      <StaffAuthModal />
+
+      {/* MODAL 1: WALK-IN / NEW BOOKING (Uses real overlap-checked NewReservationModal) */}
       {showBookingModal && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-3xl border border-slate-200/80 shadow-2xl max-w-md w-full overflow-hidden animate-in zoom-in-95 duration-200">
-            {/* Modal Header */}
-            <div className="bg-teal-950 text-white p-6 flex justify-between items-center">
-              <div className="flex items-center gap-2">
-                <Sparkles className="w-5 h-5 text-amber-400" />
-                <h3 className="font-bold text-base">New Walk-In Reservation</h3>
-              </div>
-              <button 
-                onClick={() => setShowBookingModal(false)}
-                className="text-teal-200 hover:text-white transition-colors cursor-pointer"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            {/* Modal Form */}
-            <form onSubmit={handleCreateWalkInBooking} className="p-6 flex flex-col gap-4">
-              <div className="flex flex-col gap-1">
-                <label className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Guest Full Name</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. Anand Mahindra"
-                  value={newBookingName}
-                  onChange={(e) => setNewBookingName(e.target.value)}
-                  className="w-full border border-slate-200 bg-slate-50/50 rounded-xl px-3 py-2.5 text-xs text-slate-800 focus:outline-none focus:border-teal-700 focus:bg-white transition-all"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="flex flex-col gap-1">
-                  <label className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Room Allocation</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="e.g. 104"
-                    value={newBookingRoom}
-                    onChange={(e) => setNewBookingRoom(e.target.value)}
-                    className="w-full border border-slate-200 bg-slate-50/50 rounded-xl px-3 py-2.5 text-xs text-slate-800 focus:outline-none focus:border-teal-700 focus:bg-white transition-all"
-                  />
-                </div>
-
-                <div className="flex flex-col gap-1">
-                  <label className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Room Rate (₹)</label>
-                  <input
-                    type="number"
-                    required
-                    value={newBookingPrice}
-                    onChange={(e) => setNewBookingPrice(e.target.value)}
-                    className="w-full border border-slate-200 bg-slate-50/50 rounded-xl px-3 py-2.5 text-xs text-slate-800 focus:outline-none focus:border-teal-700 focus:bg-white transition-all"
-                  />
-                </div>
-              </div>
-
-              <div className="bg-teal-50 border border-teal-100 p-3.5 rounded-xl text-[11px] text-teal-800 flex items-start gap-2 leading-relaxed">
-                <Sparkles className="w-4 h-4 text-teal-600 shrink-0 mt-0.5" />
-                <div>
-                  <strong className="font-semibold block mb-0.5">AI Smart Suggestion</strong>
-                  Our dynamic pricing system detects 85% occupancy. Suggested premium walk-in rate is <strong>₹6,200</strong>.
-                </div>
-              </div>
-
-              <div className="flex gap-3 mt-2">
-                <button
-                  type="button"
-                  onClick={() => setShowBookingModal(false)}
-                  className="flex-1 py-2.5 border border-slate-200 text-slate-500 rounded-xl text-xs font-semibold hover:bg-slate-50 transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="flex-1 py-2.5 bg-teal-800 hover:bg-teal-900 text-white rounded-xl text-xs font-bold transition-colors shadow-md shadow-teal-900/10"
-                >
-                  Confirm Reservation
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+        <NewReservationModal
+          onClose={() => setShowBookingModal(false)}
+          rooms={rooms}
+          existingBookings={bookings}
+          existingGuests={guestsCRM}
+          onSubmitBooking={async (newB, room) => {
+            await createReservationAtomic(newB, room);
+            triggerToast(`Reservation ${newB.bookingCode || ''} saved for ${newB.guestName}`);
+          }}
+        />
       )}
 
       {/* MODAL 2: REVIEW PENDING BILLING */}
@@ -756,7 +1216,8 @@ export default function App() {
                 <FileText className="w-5 h-5 text-orange-200" />
                 <h3 className="font-bold text-base">Guest Outstanding Balance</h3>
               </div>
-              <button 
+              <button
+                type="button"
                 onClick={() => {
                   setShowBillingModal(false);
                   setBillingDetail(null);
@@ -771,18 +1232,24 @@ export default function App() {
               <div className="flex items-center justify-between border-b border-slate-100 pb-3">
                 <div>
                   <h4 className="text-xs font-bold text-slate-400 uppercase">Primary Guest</h4>
-                  <p className="text-sm font-bold text-slate-800">{billingDetail?.name || 'Guest Folio'}</p>
+                  <p className="text-sm font-bold text-slate-800">
+                    {billingDetail?.name || 'Guest Folio'}
+                  </p>
                 </div>
                 <div className="text-right">
                   <h4 className="text-xs font-bold text-slate-400 uppercase">Cottage</h4>
-                  <p className="text-sm font-bold text-slate-800">{billingDetail?.roomNumber || 'Cottage 105'}</p>
+                  <p className="text-sm font-bold text-slate-800">
+                    {billingDetail?.roomNumber || 'Pending Folios'}
+                  </p>
                 </div>
               </div>
 
               <div className="flex flex-col gap-2.5">
                 <div className="flex justify-between text-xs text-slate-600">
                   <span>Pending Folio Balance (Stay &amp; Incidentals)</span>
-                  <span className="font-semibold text-slate-800">₹{(billingDetail?.amount ?? 0).toLocaleString('en-IN')}</span>
+                  <span className="font-semibold text-slate-800">
+                    ₹{(billingDetail?.amount ?? 0).toLocaleString('en-IN')}
+                  </span>
                 </div>
                 <div className="flex justify-between text-sm font-extrabold text-rose-600 bg-rose-50 px-2.5 py-2 rounded-lg border border-rose-100">
                   <span>Outstanding Balance Due</span>
@@ -804,30 +1271,13 @@ export default function App() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => {
-                    const collectedAmt = billingDetail?.amount ?? 0;
-                    const guestName = billingDetail?.name;
-                    setStats(prev => ({
-                      ...prev,
-                      pendingPaymentsAmount: Math.max(0, prev.pendingPaymentsAmount - collectedAmt),
-                      revenue: prev.revenue + collectedAmt
-                    }));
-                    if (guestName) {
-                      setDepartures(prev =>
-                        prev.map(d =>
-                          d.guestName === guestName
-                            ? { ...d, amountDue: 0, paymentStatus: 'Paid' }
-                            : d
-                        )
-                      );
-                    }
-                    setShowBillingModal(false);
-                    setBillingDetail(null);
-                    triggerToast(`Payment collected (₹${collectedAmt.toLocaleString('en-IN')}) for ${guestName || 'guest'}.`);
-                  }}
-                  className="flex-1 py-2.5 bg-teal-800 hover:bg-teal-900 text-white rounded-xl text-xs font-bold transition-colors shadow-md shadow-teal-900/10 cursor-pointer"
+                  disabled={isCollectingBilling}
+                  onClick={() => void handleConfirmDashboardCollection()}
+                  className="flex-1 py-2.5 bg-teal-800 hover:bg-teal-900 disabled:opacity-60 text-white rounded-xl text-xs font-bold transition-colors shadow-md shadow-teal-900/10 cursor-pointer"
                 >
-                  Collect ₹{(billingDetail?.amount ?? 0).toLocaleString('en-IN')}
+                  {isCollectingBilling
+                    ? 'Saving...'
+                    : `Collect ₹${(billingDetail?.amount ?? 0).toLocaleString('en-IN')}`}
                 </button>
               </div>
             </div>
@@ -844,7 +1294,8 @@ export default function App() {
                 <Brush className="w-5 h-5 text-teal-300" />
                 <h3 className="font-bold text-base">Housekeeping Priority Dispatch</h3>
               </div>
-              <button 
+              <button
+                type="button"
                 onClick={() => setShowAiActionModal(false)}
                 className="text-teal-200 hover:text-white transition-colors cursor-pointer"
               >
@@ -854,28 +1305,35 @@ export default function App() {
 
             <div className="p-6 flex flex-col gap-4">
               <p className="text-xs text-slate-500 leading-relaxed">
-                Pending and in-progress housekeeping rooms currently tracked in session state:
+                Pending and in-progress housekeeping rooms currently queued in Firestore:
               </p>
 
               <div className="flex flex-col gap-2.5 max-h-56 overflow-y-auto">
                 {housekeeping
-                  .filter(t => t.status === 'Pending' || t.status === 'In Progress')
+                  .filter((t) => t.status === 'Pending' || t.status === 'In Progress')
                   .slice(0, 4)
-                  .map(task => (
-                    <div key={task.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-100">
+                  .map((task) => (
+                    <div
+                      key={task.id}
+                      className="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-100"
+                    >
                       <div>
                         <h4 className="text-xs font-bold text-slate-800">
                           {task.roomNumber} ({task.type})
                         </h4>
                         <p className="text-[10px] text-slate-400">
-                          {task.assignedTo ? `Assigned: ${task.assignedTo}` : 'Unassigned — ready to dispatch'}
+                          {task.assignedTo
+                            ? `Assigned: ${task.assignedTo}`
+                            : 'Unassigned — ready to dispatch'}
                         </p>
                       </div>
-                      <span className={`text-[10px] px-2 py-0.5 font-semibold rounded-lg ${
-                        task.priority === 'Urgent'
-                          ? 'bg-rose-50 text-rose-700'
-                          : 'bg-amber-50 text-amber-700'
-                      }`}>
+                      <span
+                        className={`text-[10px] px-2 py-0.5 font-semibold rounded-lg ${
+                          task.priority === 'Urgent'
+                            ? 'bg-rose-50 text-rose-700'
+                            : 'bg-amber-50 text-amber-700'
+                        }`}
+                      >
                         {task.priority}
                       </span>
                     </div>
@@ -895,17 +1353,17 @@ export default function App() {
                 </button>
                 <button
                   type="button"
-                  onClick={confirmAiHousekeepingClean}
-                  className="flex-1 py-2.5 bg-teal-800 hover:bg-teal-900 text-white rounded-xl text-xs font-bold transition-colors shadow-md cursor-pointer"
+                  disabled={isDispatchingAi}
+                  onClick={() => void confirmAiHousekeepingClean()}
+                  className="flex-1 py-2.5 bg-teal-800 hover:bg-teal-900 disabled:opacity-60 text-white rounded-xl text-xs font-bold transition-colors shadow-md cursor-pointer"
                 >
-                  Mark Queue Cleaned
+                  {isDispatchingAi ? 'Updating...' : 'Mark Queue Cleaned'}
                 </button>
               </div>
             </div>
           </div>
         </div>
       )}
-
     </div>
   );
 }

@@ -39,8 +39,8 @@ export default function WhatsAppChatSimulator({
   isOpen,
   onClose
 }: WhatsAppChatSimulatorProps) {
-  const [guestName, setGuestName] = useState('Anand Sharma');
-  const [roomNumber, setRoomNumber] = useState('Villa 304');
+  const [guestName, setGuestName] = useState('Rohan Kulkarni');
+  const [roomNumber, setRoomNumber] = useState('Cottage 101');
   const [inputText, setInputText] = useState('');
   const [messages, setMessages] = useState<SimulatedMessage[]>([]);
   const [isTyping, setIsTyping] = useState(false);
@@ -56,11 +56,11 @@ export default function WhatsAppChatSimulator({
         // Replace variables
         let formatted = node.config.messageText
           .replace(/\{\{GuestName\}\}/g, guestName)
-          .replace(/\{\{ResortName\}\}/g, 'Majestic Serenity Resort')
+          .replace(/\{\{ResortName\}\}/g, 'Mykonos Cottage, Tarkarli')
           .replace(/\{\{RoomNumber\}\}/g, roomNumber)
-          .replace(/\{\{CheckInDate\}\}/g, 'Aug 18, 2026')
-          .replace(/\{\{BookingID\}\}/g, 'RES-8924')
-          .replace(/\{\{TotalAmount\}\}/g, '$840.00');
+          .replace(/\{\{CheckInDate\}\}/g, 'Today')
+          .replace(/\{\{BookingID\}\}/g, 'MYK-101')
+          .replace(/\{\{TotalAmount\}\}/g, '₹8,400');
 
         initial.push({
           id: `sim-${node.id}`,
@@ -77,7 +77,7 @@ export default function WhatsAppChatSimulator({
       initial.push({
         id: 'sim-default',
         sender: 'resort',
-        text: `Hi ${guestName}, welcome to Majestic Serenity Resort! Your ${roomNumber} is ready for check-in. Reply anytime for concierge assistance.`,
+        text: `Hi ${guestName}, welcome to Mykonos Cottage, Tarkarli! Your ${roomNumber} is ready for check-in. Reply anytime for concierge assistance.`,
         timestamp: '10:15 AM',
         status: 'read',
         buttons: [{ label: '📖 Breakfast & Menus' }, { label: '💆‍♀️ Book Spa' }]
@@ -148,7 +148,7 @@ export default function WhatsAppChatSimulator({
         {
           id: 'sim-default',
           sender: 'resort',
-          text: `Hi ${guestName}, your booking for Majestic Serenity Resort is confirmed for Aug 18 in ${roomNumber}. Welcome!`,
+          text: `Hi ${guestName}, your booking for Mykonos Cottage, Tarkarli is confirmed for today in ${roomNumber}. Welcome!`,
           timestamp: '10:15 AM',
           status: 'read',
           buttons: [{ label: '📖 Breakfast & Menus' }, { label: '💆‍♀️ Book Spa' }]
@@ -263,7 +263,7 @@ export default function WhatsAppChatSimulator({
               <div>
                 <div className="flex items-center gap-1.5">
                   <h4 className="font-bold text-sm text-white">
-                    Majestic Serenity Resort
+                    Mykonos Cottage, Tarkarli
                   </h4>
                   <span className="w-3.5 h-3.5 rounded-full bg-emerald-400 flex items-center justify-center text-[9px] text-teal-950 font-bold">
                     ✓

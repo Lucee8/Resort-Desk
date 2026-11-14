@@ -1,62 +1,63 @@
 import React, { useState } from 'react';
-import { 
-  X, 
-  UploadCloud, 
-  FileText, 
-  Image as ImageIcon, 
-  Film, 
-  Trash2, 
-  Clock, 
-  AlertTriangle, 
-  CheckCircle2, 
-  User, 
-  MapPin, 
+import {
+  X,
+  UploadCloud,
+  FileText,
+  Trash2,
   Wrench,
-  Sparkles,
-  ShieldAlert
+  AlertCircle,
 } from 'lucide-react';
-import { 
-  MaintenanceCategory, 
-  MaintenancePriority, 
-  MaintenanceTicket, 
-  Technician, 
-  MaintenanceAttachment 
+import {
+  MaintenanceCategory,
+  MaintenancePriority,
+  MaintenanceTicket,
+  Technician,
+  MaintenanceAttachment,
+  RoomUnit,
 } from '../../types';
+import { useAuth } from '../../context/AuthContext';
+import { formatShortDate, getTodayISO } from '../../utils/bookingUtils';
 
 interface RegisterComplaintModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSubmit: (newTicket: MaintenanceTicket) => void;
+  onSubmit: (newTicket: MaintenanceTicket) => void | Promise<void>;
   technicians: Technician[];
+  rooms?: RoomUnit[];
 }
 
 export default function RegisterComplaintModal({
   isOpen,
   onClose,
   onSubmit,
-  technicians
+  technicians,
+  rooms = [],
 }: RegisterComplaintModalProps) {
+  const { user } = useAuth();
+  const operatorName =
+    user?.displayName || user?.email?.split('@')[0] || 'Mykonos Staff';
+
+  const defaultRoom = rooms[0]
+    ? `${rooms[0].roomName} (#${rooms[0].roomNumber})`
+    : 'Cottage 101';
+
   const [title, setTitle] = useState('');
   const [category, setCategory] = useState<MaintenanceCategory>('HVAC');
   const [description, setDescription] = useState('');
-  const [roomNumber, setRoomNumber] = useState('Deluxe Villa #104');
-  const [area, setArea] = useState('Master Bedroom / Luggage Rack');
+  const [roomNumber, setRoomNumber] = useState(defaultRoom);
+  const [area, setArea] = useState('Main Cottage / Bath');
   const [priority, setPriority] = useState<MaintenancePriority>('High');
-  const [reportedBy, setReportedBy] = useState('Arun K. (Ops Manager)');
-  const [assignedTechnicianId, setAssignedTechnicianId] = useState<string>('tech-1');
+  const [reportedBy, setReportedBy] = useState(operatorName);
+  const [assignedTechnicianId, setAssignedTechnicianId] = useState<string>(
+    technicians[0]?.id || ''
+  );
   const [estimatedCompletionTime, setEstimatedCompletionTime] = useState('45 mins');
   const [isRoomBlocked, setIsRoomBlocked] = useState(true);
-  const [partsCost, setPartsCost] = useState('1200');
-  const [laborCost, setLaborCost] = useState('600');
-  const [attachments, setAttachments] = useState<MaintenanceAttachment[]>([
-    {
-      id: 'sample-att-1',
-      name: 'Initial_Inspection_Capture.jpg',
-      url: 'https://images.unsplash.com/photo-1581092160607-ee22621dd758?auto=format&fit=crop&w=600&q=80',
-      type: 'image',
-      size: '1.9 MB'
-    }
-  ]);
+  const [partsCost, setPartsCost] = useState('0');
+  const [laborCost, setLaborCost] = useState('400');
+  const [attachments, setAttachments] = useState<MaintenanceAttachment[]>([]);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
 
   const categories: MaintenanceCategory[] = [
     'HVAC',
@@ -68,52 +69,49 @@ export default function RegisterComplaintModal({
     'Appliance',
     'Civil/Structural',
     'Cleaning Equipment',
-    'Other'
+    'Other',
   ];
 
   const priorities: MaintenancePriority[] = ['Emergency', 'High', 'Medium', 'Low'];
 
-  const handleAddSampleAttachment = (type: 'image' | 'doc') => {
-    if (type === 'image') {
-      setAttachments(prev => [
-        ...prev,
-        {
-          id: `att-${Date.now()}`,
-          name: `Site_Photo_${prev.length + 1}.jpg`,
-          url: 'https://images.unsplash.com/photo-1584622650111-993a426fbf0a?auto=format&fit=crop&w=600&q=80',
-          type: 'image',
-          size: '2.1 MB'
-        }
-      ]);
-    } else {
-      setAttachments(prev => [
-        ...prev,
-        {
-          id: `att-${Date.now()}`,
-          name: `Diagnostic_Report_${prev.length + 1}.pdf`,
-          url: '#',
-          type: 'doc',
-          size: '450 KB'
-        }
-      ]);
-    }
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const isImage = file.type.startsWith('image/');
+    const previewUrl = isImage ? URL.createObjectURL(file) : '#';
+    setAttachments((prev) => [
+      ...prev,
+      {
+        id: `att-${Date.now()}`,
+        name: file.name,
+        url: previewUrl,
+        type: isImage ? 'image' : 'doc',
+        size: `${Math.max(1, Math.round(file.size / 1024))} KB`,
+      },
+    ]);
+    e.target.value = '';
   };
 
   const handleRemoveAttachment = (id: string) => {
-    setAttachments(prev => prev.filter(a => a.id !== id));
+    setAttachments((prev) => prev.filter((a) => a.id !== id));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setErrorMsg(null);
     if (!title.trim() || !roomNumber.trim()) {
-      alert('Please fill out the Issue Title and Room Number');
+      setErrorMsg('Please fill out both the Issue Title and Cottage / Facility.');
       return;
     }
 
-    const assignedTech = technicians.find(t => t.id === assignedTechnicianId);
+    const assignedTech = technicians.find((t) => t.id === assignedTechnicianId);
+    const nowTime = new Date().toLocaleTimeString([], {
+      hour: '2-digit',
+      minute: '2-digit',
+    });
 
     const newTicket: MaintenanceTicket = {
-      id: `TKT-${Math.floor(1000 + Math.random() * 9000)}`,
+      id: `TKT-${Date.now().toString().slice(-4)}`,
       title: title.trim(),
       category,
       description: description.trim() || 'No detailed description provided.',
@@ -121,9 +119,9 @@ export default function RegisterComplaintModal({
       area: area.trim(),
       priority,
       status: assignedTech ? 'Assigned' : 'Reported',
-      reportedBy: reportedBy.trim(),
-      reportedDate: 'Today, Oct 24',
-      reportedTime: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      reportedBy: reportedBy.trim() || operatorName,
+      reportedDate: `Today, ${formatShortDate(getTodayISO())}`,
+      reportedTime: nowTime,
       assignedTechnicianId: assignedTech?.id,
       assignedTechnicianName: assignedTech?.name,
       assignedTechnicianAvatar: assignedTech?.avatar,
@@ -134,48 +132,66 @@ export default function RegisterComplaintModal({
         parts: Number(partsCost) || 0,
         labor: Number(laborCost) || 0,
         vendor: 0,
-        total: (Number(partsCost) || 0) + (Number(laborCost) || 0)
+        total: (Number(partsCost) || 0) + (Number(laborCost) || 0),
       },
       attachments,
       timeline: [
         {
           id: `tm-${Date.now()}-1`,
           title: 'Ticket Created',
-          time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          author: reportedBy,
+          time: nowTime,
+          author: reportedBy.trim() || operatorName,
           note: `Registered with ${priority} priority`,
-          done: true
+          done: true,
         },
-        ...(assignedTech ? [{
-          id: `tm-${Date.now()}-2`,
-          title: `Assigned to ${assignedTech.name}`,
-          time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          author: 'Auto Dispatch System',
-          note: `${assignedTech.department} technician notified`,
-          done: true
-        }] : [])
+        ...(assignedTech
+          ? [
+              {
+                id: `tm-${Date.now()}-2`,
+                title: `Assigned to ${assignedTech.name}`,
+                time: nowTime,
+                author: 'ResortDesk Dispatch',
+                note: `${assignedTech.department} technician assigned`,
+                done: true,
+              },
+            ]
+          : []),
       ],
-      parts: Number(partsCost) > 0 ? [
-        {
-          id: `part-${Date.now()}`,
-          name: `${category} Replacement Module`,
-          quantity: 1,
-          cost: Number(partsCost),
-          status: 'In Stock'
-        }
-      ] : []
+      parts:
+        Number(partsCost) > 0
+          ? [
+              {
+                id: `part-${Date.now()}`,
+                name: `${category} Service Parts`,
+                quantity: 1,
+                cost: Number(partsCost),
+                status: 'In Stock',
+              },
+            ]
+          : [],
     };
 
-    onSubmit(newTicket);
-    onClose();
+    setSubmitting(true);
+    try {
+      await onSubmit(newTicket);
+      setTitle('');
+      setDescription('');
+      setAttachments([]);
+      onClose();
+    } catch (err) {
+      setErrorMsg(
+        err instanceof Error ? err.message : 'Failed to save work order to Firestore.'
+      );
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 sm:p-6 font-sans animate-in fade-in duration-200">
+    <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 sm:p-6 font-sans">
       <div className="bg-white rounded-3xl max-w-3xl w-full border border-slate-200 shadow-2xl overflow-hidden max-h-[92vh] flex flex-col">
-        {/* Modal Header */}
         <div className="px-6 py-5 border-b border-slate-200/80 bg-slate-50 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-2xl bg-teal-800 text-white flex items-center justify-center shadow-xs">
@@ -186,24 +202,30 @@ export default function RegisterComplaintModal({
                 Register Maintenance Complaint
               </h3>
               <p className="text-xs text-slate-500 mt-0.5">
-                Issue a work order to engineering & maintenance staff
+                Log a work order for Mykonos Cottage, Tarkarli
               </p>
             </div>
           </div>
           <button
+            type="button"
             onClick={onClose}
-            className="w-8 h-8 rounded-full bg-slate-200/70 hover:bg-slate-300 flex items-center justify-center text-slate-600 transition-colors"
+            className="w-8 h-8 rounded-full bg-slate-200/70 hover:bg-slate-300 flex items-center justify-center text-slate-600 transition-colors cursor-pointer"
           >
             <X className="w-4 h-4" />
           </button>
         </div>
 
-        {/* Modal Body */}
-        <form onSubmit={handleSubmit} className="overflow-y-auto p-6 space-y-6 flex-1">
-          {/* Section 1: Complaint Information */}
+        <form onSubmit={(e) => void handleSubmit(e)} className="overflow-y-auto p-6 space-y-6 flex-1">
+          {errorMsg && (
+            <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-semibold flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 shrink-0" />
+              <span>{errorMsg}</span>
+            </div>
+          )}
+
           <div className="space-y-4">
             <h4 className="text-xs font-bold uppercase tracking-wider text-teal-800 flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-teal-700"></span>
+              <span className="w-2 h-2 rounded-full bg-teal-700" />
               Complaint Information
             </h4>
 
@@ -215,7 +237,7 @@ export default function RegisterComplaintModal({
                 <input
                   type="text"
                   required
-                  placeholder="e.g. AC Leaking - Water dripping over luggage rack"
+                  placeholder="e.g. Split AC condensate drain leak"
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
                   className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm font-medium focus:ring-2 focus:ring-teal-700/20 focus:border-teal-700 focus:bg-white transition-all"
@@ -232,7 +254,9 @@ export default function RegisterComplaintModal({
                   className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm font-medium focus:ring-2 focus:ring-teal-700/20 focus:border-teal-700"
                 >
                   {categories.map((cat) => (
-                    <option key={cat} value={cat}>{cat}</option>
+                    <option key={cat} value={cat}>
+                      {cat}
+                    </option>
                   ))}
                 </select>
               </div>
@@ -245,39 +269,60 @@ export default function RegisterComplaintModal({
                   value={priority}
                   onChange={(e) => setPriority(e.target.value as MaintenancePriority)}
                   className={`w-full px-3.5 py-2.5 border rounded-xl text-xs sm:text-sm font-bold focus:ring-2 ${
-                    priority === 'Emergency' ? 'bg-rose-50 border-rose-300 text-rose-800' :
-                    priority === 'High' ? 'bg-orange-50 border-orange-300 text-orange-800' :
-                    priority === 'Medium' ? 'bg-amber-50 border-amber-300 text-amber-800' :
-                    'bg-slate-50 border-slate-200 text-slate-800'
+                    priority === 'Emergency'
+                      ? 'bg-rose-50 border-rose-300 text-rose-800'
+                      : priority === 'High'
+                        ? 'bg-orange-50 border-orange-300 text-orange-800'
+                        : priority === 'Medium'
+                          ? 'bg-amber-50 border-amber-300 text-amber-800'
+                          : 'bg-slate-50 border-slate-200 text-slate-800'
                   }`}
                 >
                   {priorities.map((p) => (
-                    <option key={p} value={p}>{p} Priority</option>
+                    <option key={p} value={p}>
+                      {p} Priority
+                    </option>
                   ))}
                 </select>
               </div>
 
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Room / Villa / Facility <span className="text-rose-500">*</span>
+                  Cottage / Room / Facility <span className="text-rose-500">*</span>
                 </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. Deluxe Villa #104 or Pool Deck"
-                  value={roomNumber}
-                  onChange={(e) => setRoomNumber(e.target.value)}
-                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm font-medium focus:ring-2 focus:ring-teal-700/20 focus:border-teal-700"
-                />
+                {rooms.length > 0 ? (
+                  <select
+                    value={roomNumber}
+                    onChange={(e) => setRoomNumber(e.target.value)}
+                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm font-medium focus:ring-2 focus:ring-teal-700/20 focus:border-teal-700"
+                  >
+                    {rooms.map((r) => (
+                      <option key={r.id} value={`${r.roomName} (#${r.roomNumber})`}>
+                        {r.roomName} (#{r.roomNumber}) — {r.status}
+                      </option>
+                    ))}
+                    <option value="Pool & Courtyard Deck">Pool &amp; Courtyard Deck</option>
+                    <option value="Main Reception & Dining">Main Reception &amp; Dining</option>
+                  </select>
+                ) : (
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. Cottage 101 or Pool Deck"
+                    value={roomNumber}
+                    onChange={(e) => setRoomNumber(e.target.value)}
+                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm font-medium focus:ring-2 focus:ring-teal-700/20 focus:border-teal-700"
+                  />
+                )}
               </div>
 
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Specific Area / Annex
+                  Specific Area / Fixture
                 </label>
                 <input
                   type="text"
-                  placeholder="e.g. Master En-suite, Balcony, Main Door"
+                  placeholder="e.g. En-suite, Veranda, Main Door"
                   value={area}
                   onChange={(e) => setArea(e.target.value)}
                   className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm font-medium focus:ring-2 focus:ring-teal-700/20 focus:border-teal-700"
@@ -290,7 +335,7 @@ export default function RegisterComplaintModal({
                 </label>
                 <textarea
                   rows={3}
-                  placeholder="Provide precise details of symptoms, error codes, guest feedback, or inspection findings..."
+                  placeholder="Describe symptoms, guest observations, or inspection notes..."
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
                   className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm font-medium focus:ring-2 focus:ring-teal-700/20 focus:border-teal-700 focus:bg-white"
@@ -309,8 +354,7 @@ export default function RegisterComplaintModal({
                 />
               </div>
 
-              {/* Block Room Checkbox */}
-              <div className="flex items-center gap-3 pt-6">
+              <div className="flex items-center gap-3 pt-5">
                 <input
                   id="chk-block-room"
                   type="checkbox"
@@ -318,18 +362,20 @@ export default function RegisterComplaintModal({
                   onChange={(e) => setIsRoomBlocked(e.target.checked)}
                   className="w-4 h-4 text-teal-800 border-slate-300 rounded focus:ring-teal-700"
                 />
-                <label htmlFor="chk-block-room" className="text-xs font-bold text-slate-800 cursor-pointer">
-                  Block Room in PMS (Prevent guest check-in until verified)
+                <label
+                  htmlFor="chk-block-room"
+                  className="text-xs font-bold text-slate-800 cursor-pointer"
+                >
+                  Block Cottage in PMS (Sets room to Maintenance)
                 </label>
               </div>
             </div>
           </div>
 
-          {/* Section 2: Technician Assignment */}
           <div className="space-y-4 pt-4 border-t border-slate-100">
             <h4 className="text-xs font-bold uppercase tracking-wider text-teal-800 flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-teal-700"></span>
-              Technician Assignment & Estimates
+              <span className="w-2 h-2 rounded-full bg-teal-700" />
+              Technician Assignment &amp; Estimates
             </h4>
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -370,10 +416,11 @@ export default function RegisterComplaintModal({
 
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Est. Parts Cost (₹ / $)
+                  Est. Parts Cost (₹)
                 </label>
                 <input
                   type="number"
+                  min={0}
                   value={partsCost}
                   onChange={(e) => setPartsCost(e.target.value)}
                   placeholder="0"
@@ -383,54 +430,43 @@ export default function RegisterComplaintModal({
             </div>
           </div>
 
-          {/* Section 3: Attachments */}
           <div className="space-y-4 pt-4 border-t border-slate-100">
             <div className="flex items-center justify-between">
               <h4 className="text-xs font-bold uppercase tracking-wider text-teal-800 flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-teal-700"></span>
-                Evidence & Media Attachments
+                <span className="w-2 h-2 rounded-full bg-teal-700" />
+                Attachments
               </h4>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => handleAddSampleAttachment('image')}
-                  className="text-xs font-semibold text-teal-800 hover:text-teal-950 bg-teal-50 px-2.5 py-1 rounded-lg border border-teal-200/80"
-                >
-                  + Add Inspection Photo
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleAddSampleAttachment('doc')}
-                  className="text-xs font-semibold text-slate-600 hover:text-slate-900 bg-slate-100 px-2.5 py-1 rounded-lg border border-slate-200"
-                >
-                  + Add Telemetry Doc
-                </button>
+              <label className="text-xs font-semibold text-teal-800 hover:text-teal-950 bg-teal-50 px-3 py-1.5 rounded-lg border border-teal-200/80 cursor-pointer">
+                + Attach File / Photo
+                <input
+                  type="file"
+                  accept="image/*,.pdf"
+                  onChange={handleFileSelect}
+                  className="hidden"
+                />
+              </label>
+            </div>
+
+            {attachments.length === 0 ? (
+              <div className="border border-dashed border-slate-200 rounded-2xl p-4 text-center text-slate-400">
+                <UploadCloud className="w-6 h-6 mx-auto mb-1 text-slate-300" />
+                <p className="text-xs">Optional: Attach photo or diagnostic document.</p>
               </div>
-            </div>
-
-            {/* Drop Zone */}
-            <div className="border-2 border-dashed border-slate-200 hover:border-teal-700 hover:bg-teal-50/20 rounded-2xl p-4 text-center transition-colors">
-              <UploadCloud className="w-8 h-8 text-slate-400 mx-auto mb-1.5" />
-              <p className="text-xs font-semibold text-slate-700">
-                Drag & drop photos, diagnostic videos, or invoice documents here
-              </p>
-              <p className="text-[11px] text-slate-400 mt-0.5">
-                PNG, JPG, MP4, PDF up to 25MB supported
-              </p>
-            </div>
-
-            {/* Attachment Items List */}
-            {attachments.length > 0 && (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 mt-2">
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                 {attachments.map((att) => (
-                  <div 
+                  <div
                     key={att.id}
                     className="flex items-center justify-between p-2.5 bg-slate-50 border border-slate-200 rounded-xl"
                   >
                     <div className="flex items-center gap-2.5 min-w-0">
                       {att.type === 'image' ? (
                         <div className="w-9 h-9 rounded-lg overflow-hidden shrink-0 bg-slate-200">
-                          <img src={att.url} alt={att.name} className="w-full h-full object-cover" />
+                          <img
+                            src={att.url}
+                            alt={att.name}
+                            className="w-full h-full object-cover"
+                          />
                         </div>
                       ) : (
                         <div className="w-9 h-9 rounded-lg bg-teal-100 text-teal-800 flex items-center justify-center shrink-0">
@@ -439,13 +475,13 @@ export default function RegisterComplaintModal({
                       )}
                       <div className="min-w-0">
                         <p className="text-xs font-bold text-slate-800 truncate">{att.name}</p>
-                        <p className="text-[10px] text-slate-400">{att.size || '1.5 MB'}</p>
+                        <p className="text-[10px] text-slate-400">{att.size || 'Attached'}</p>
                       </div>
                     </div>
                     <button
                       type="button"
                       onClick={() => handleRemoveAttachment(att.id)}
-                      className="p-1.5 text-slate-400 hover:text-rose-600 transition-colors"
+                      className="p-1.5 text-slate-400 hover:text-rose-600 transition-colors cursor-pointer"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
                     </button>
@@ -455,20 +491,20 @@ export default function RegisterComplaintModal({
             )}
           </div>
 
-          {/* Modal Footer Buttons */}
           <div className="pt-6 border-t border-slate-200 flex items-center justify-end gap-3 sticky bottom-0 bg-white">
             <button
               type="button"
               onClick={onClose}
-              className="px-5 py-2.5 rounded-xl border border-slate-300 text-slate-700 text-xs font-bold hover:bg-slate-100 transition-colors"
+              className="px-5 py-2.5 rounded-xl border border-slate-300 text-slate-700 text-xs font-bold hover:bg-slate-100 transition-colors cursor-pointer"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="px-6 py-2.5 rounded-xl bg-teal-800 hover:bg-teal-900 text-white text-xs font-bold shadow-md shadow-teal-900/10 transition-all hover:scale-[1.01] cursor-pointer"
+              disabled={submitting}
+              className="px-6 py-2.5 rounded-xl bg-teal-800 hover:bg-teal-900 disabled:opacity-60 text-white text-xs font-bold shadow-md transition-all cursor-pointer"
             >
-              Create Ticket
+              {submitting ? 'Saving Ticket...' : 'Create Ticket'}
             </button>
           </div>
         </form>

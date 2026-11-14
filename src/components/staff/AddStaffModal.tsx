@@ -24,7 +24,7 @@ export default function AddStaffModal({
   const [shift, setShift] = useState(staffToEdit?.todayShift || '09:00 AM - 06:00 PM');
   const [employmentType, setEmploymentType] = useState<EmploymentType>(staffToEdit?.employmentType || 'Full-time');
   const [skills, setSkills] = useState(staffToEdit?.skills.join(', ') || 'Guest Relations, Opera PMS, English, Marathi');
-  const [bankName, setBankName] = useState(staffToEdit?.bankDetails?.bankName || 'HDFC Bank - Alibaug');
+  const [bankName, setBankName] = useState(staffToEdit?.bankDetails?.bankName || 'HDFC Bank - Malvan');
   const [accountNumber, setAccountNumber] = useState(staffToEdit?.bankDetails?.accountNumber || '•••• •••• 4589');
 
   React.useEffect(() => {
@@ -38,7 +38,7 @@ export default function AddStaffModal({
       setShift(staffToEdit.todayShift || '09:00 AM - 06:00 PM');
       setEmploymentType(staffToEdit.employmentType || 'Full-time');
       setSkills(staffToEdit.skills.join(', ') || 'Guest Relations, Opera PMS, English, Marathi');
-      setBankName(staffToEdit.bankDetails?.bankName || 'HDFC Bank - Alibaug');
+      setBankName(staffToEdit.bankDetails?.bankName || 'HDFC Bank - Malvan');
       setAccountNumber(staffToEdit.bankDetails?.accountNumber || '•••• •••• 4589');
     }
   }, [staffToEdit]);

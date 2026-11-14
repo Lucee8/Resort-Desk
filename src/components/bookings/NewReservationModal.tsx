@@ -40,6 +40,7 @@ interface NewReservationModalProps {
   existingGuests: GuestCRM[];
   prefillRoom?: RoomUnit | null;
   prefillCheckInISO?: string | null;
+  editingBooking?: Booking | null;
   onClose: () => void;
   onSubmitBooking: (booking: Booking, room: RoomUnit, sendWhatsApp: boolean) => Promise<void>;
 }
@@ -59,50 +60,74 @@ export default function NewReservationModal({
   existingGuests,
   prefillRoom,
   prefillCheckInISO,
+  editingBooking,
   onClose,
   onSubmitBooking,
 }: NewReservationModalProps) {
-  const defaultCheckIn = prefillCheckInISO || getTodayISO();
-  const defaultCheckOut = addDaysISO(defaultCheckIn, 2);
+  const defaultCheckIn =
+    editingBooking?.checkInDateISO || prefillCheckInISO || getTodayISO();
+  const defaultCheckOut =
+    editingBooking?.checkOutDateISO || addDaysISO(defaultCheckIn, 2);
 
   // Step 1: Stay Dates & Room Allocation
   const [checkInISO, setCheckInISO] = useState(defaultCheckIn);
   const [checkOutISO, setCheckOutISO] = useState(defaultCheckOut);
-  const [adults, setAdults] = useState(2);
-  const [children, setChildren] = useState(0);
+  const [adults, setAdults] = useState(editingBooking?.adults || 2);
+  const [children, setChildren] = useState(editingBooking?.children || 0);
   const [selectedCategory, setSelectedCategory] = useState<string>(
-    prefillRoom?.categoryName || 'Private Pool Villa'
+    editingBooking?.roomCategory || prefillRoom?.categoryName || 'Private Pool Villa'
   );
-  const [selectedRoomId, setSelectedRoomId] = useState<string>(prefillRoom?.id || '');
+  const [selectedRoomId, setSelectedRoomId] = useState<string>(
+    editingBooking?.roomId || prefillRoom?.id || ''
+  );
 
   // Step 2: Guest Particulars & Identity
   const [guestLookup, setGuestLookup] = useState('');
-  const [selectedExistingGuestId, setSelectedExistingGuestId] = useState<string | null>(null);
-  const [guestName, setGuestName] = useState('');
-  const [guestPhone, setGuestPhone] = useState('+91 ');
-  const [guestEmail, setGuestEmail] = useState('');
-  const [guestCity, setGuestCity] = useState('');
-  const [sourceChannel, setSourceChannel] = useState<BookingSourceChannel>('Direct Walk-in / Phone');
-  const [idProofType, setIdProofType] = useState<'Aadhaar Card' | 'Passport' | 'Driving License' | 'Voter ID'>('Aadhaar Card');
+  const [selectedExistingGuestId, setSelectedExistingGuestId] = useState<string | null>(
+    editingBooking?.guestId || null
+  );
+  const [guestName, setGuestName] = useState(editingBooking?.guestName || '');
+  const [guestPhone, setGuestPhone] = useState(editingBooking?.guestPhone || '+91 ');
+  const [guestEmail, setGuestEmail] = useState(editingBooking?.guestEmail || '');
+  const [guestCity, setGuestCity] = useState(editingBooking?.guestCity || '');
+  const [sourceChannel, setSourceChannel] = useState<BookingSourceChannel>(
+    editingBooking?.source || 'Direct Walk-in / Phone'
+  );
+  const [idProofType, setIdProofType] = useState<'Aadhaar Card' | 'Passport' | 'Driving License' | 'Voter ID'>(
+    (editingBooking?.idProofType as 'Aadhaar Card' | 'Passport' | 'Driving License' | 'Voter ID') || 'Aadhaar Card'
+  );
   const [idProofNumber, setIdProofNumber] = useState('');
   const [idFile, setIdFile] = useState<File | null>(null);
 
   // Step 3: Folio & Advance
-  const [mealPlan, setMealPlan] = useState<MealPlanType>('CP (Breakfast)');
+  const [mealPlan, setMealPlan] = useState<MealPlanType>(
+    editingBooking?.mealPlan || 'CP (Breakfast)'
+  );
   const [extrasAmountStr, setExtrasAmountStr] = useState('0');
-  const [extrasLabel, setExtrasLabel] = useState('Scuba / Speedboat Transfer');
-  const [discountStr, setDiscountStr] = useState('0');
-  const [isInterstateIGST, setIsInterstateIGST] = useState(false);
-  const [advanceStr, setAdvanceStr] = useState('0');
+  const [extrasLabel] = useState('Scuba / Speedboat Transfer');
+  const [discountStr, setDiscountStr] = useState(String(editingBooking?.discount || 0));
+  const [isInterstateIGST, setIsInterstateIGST] = useState(
+    Boolean(editingBooking?.invoice?.igst && editingBooking.invoice.igst > 0)
+  );
+  const [advanceStr, setAdvanceStr] = useState(
+    String(
+      editingBooking
+        ? editingBooking.advancePaid ??
+            (editingBooking.paymentStatus === 'Paid' ? editingBooking.amount : 0)
+        : 0
+    )
+  );
   const [paymentMode, setPaymentMode] = useState<BookingPaymentMethod>('UPI / GPay');
   const [transactionRef, setTransactionRef] = useState('');
 
   // Step 4: Concierge & Operational Notes
-  const [arrivalTime, setArrivalTime] = useState('02:00 PM');
-  const [occasionTag, setOccasionTag] = useState('');
-  const [conciergeRequest, setConciergeRequest] = useState('');
-  const [housekeepingNote, setHousekeepingNote] = useState('');
-  const [internalStaffNote, setInternalStaffNote] = useState('');
+  const [arrivalTime, setArrivalTime] = useState(editingBooking?.arrivalTime || '02:00 PM');
+  const [occasionTag, setOccasionTag] = useState(editingBooking?.occasionTag || '');
+  const [conciergeRequest, setConciergeRequest] = useState(
+    editingBooking?.conciergeRequest || editingBooking?.notes?.[0] || ''
+  );
+  const [housekeepingNote, setHousekeepingNote] = useState(editingBooking?.housekeepingNote || '');
+  const [internalStaffNote, setInternalStaffNote] = useState(editingBooking?.internalStaffNote || '');
 
   // Submission state
   const [submitting, setSubmitting] = useState(false);
@@ -118,7 +143,13 @@ export default function NewReservationModal({
       const availRooms =
         nights > 0
           ? catRooms.filter((r) =>
-              isRoomAvailableForRange(r, existingBookings, checkInISO, checkOutISO)
+              isRoomAvailableForRange(
+                r,
+                existingBookings,
+                checkInISO,
+                checkOutISO,
+                editingBooking?.id
+              )
             )
           : [];
       const minRate = catRooms.length > 0 ? Math.min(...catRooms.map((r) => r.ratePerNight)) : 0;
@@ -130,7 +161,7 @@ export default function NewReservationModal({
         minRate,
       };
     });
-  }, [rooms, existingBookings, checkInISO, checkOutISO, nights]);
+  }, [rooms, existingBookings, checkInISO, checkOutISO, nights, editingBooking?.id]);
 
   const availableRoomsInCategory = useMemo(() => {
     const found = categoryStats.find((c) => c.category === selectedCategory);
@@ -214,7 +245,7 @@ export default function NewReservationModal({
       setErrorMsg('Advance amount cannot exceed the Grand Total.');
       return;
     }
-    if (advanceNum > 0 && paymentMode !== 'Cash' && !transactionRef.trim()) {
+    if (!editingBooking && advanceNum > 0 && paymentMode !== 'Cash' && !transactionRef.trim()) {
       setErrorMsg(`Please provide a transaction reference ID for ${paymentMode}.`);
       return;
     }
@@ -222,9 +253,12 @@ export default function NewReservationModal({
     setSubmitting(true);
     try {
       const codeDigits = String(Math.floor(1000 + Math.random() * 9000));
-      const bookingId = `bk-mc-${Date.now()}`;
+      const bookingId = editingBooking?.id || `bk-mc-${Date.now()}`;
       const prefix = gstSettings.invoicePrefix.replace(/\/$/, '');
-      const folioNo = `${prefix}-${codeDigits}`;
+      const folioNo =
+        editingBooking?.folioNumber ||
+        editingBooking?.invoice?.invoiceNumber ||
+        `${prefix}-${codeDigits}`;
 
       let uploadedUrl: string | undefined;
       if (idFile) {
@@ -287,11 +321,20 @@ export default function NewReservationModal({
         .toUpperCase()
         .slice(0, 2);
 
+      const existingPayments = editingBooking?.payments || [];
+      const existingAdvance = editingBooking
+        ? editingBooking.advancePaid ??
+          (editingBooking.paymentStatus === 'Paid' ? editingBooking.amount : 0)
+        : advanceNum;
+      const finalAdvance = editingBooking ? existingAdvance : advanceNum;
+      const finalBalance = Math.max(0, folio.grandTotal - finalAdvance);
+
       const newBooking: Booking = {
+        ...(editingBooking || {}),
         id: bookingId,
-        bookingCode: `BK-${codeDigits}`,
+        bookingCode: editingBooking?.bookingCode || `BK-${codeDigits}`,
         folioNumber: folioNo,
-        guestId: selectedExistingGuestId || undefined,
+        guestId: selectedExistingGuestId || editingBooking?.guestId,
         guestName: guestName.trim(),
         guestPhone: guestPhone.trim(),
         guestEmail: guestEmail.trim(),
@@ -305,23 +348,28 @@ export default function NewReservationModal({
         checkInDateISO: checkInISO,
         checkOutDateISO: checkOutISO,
         arrivalTime,
-        checkoutTime: '11:00 AM',
+        checkoutTime: editingBooking?.checkoutTime || '11:00 AM',
         nights,
         adults,
         children,
         mealPlan,
         source: sourceChannel,
         amount: folio.grandTotal,
-        advancePaid: advanceNum,
-        balanceDue,
+        advancePaid: finalAdvance,
+        balanceDue: finalBalance,
         discount: folio.discountAmount,
         gstRateApplied: folio.roomGstRate,
         sacCode: folio.roomSacCode,
-        bookingStatus: mode === 'tentative' ? 'Pending' : 'Confirmed',
+        bookingStatus: editingBooking
+          ? editingBooking.bookingStatus
+          : mode === 'tentative'
+            ? 'Pending'
+            : 'Confirmed',
         paymentStatus:
-          balanceDue === 0 ? 'Paid' : advanceNum > 0 ? 'Partial' : 'Unpaid',
-        payments:
-          advanceNum > 0
+          finalBalance === 0 ? 'Paid' : finalAdvance > 0 ? 'Partial' : 'Unpaid',
+        payments: editingBooking
+          ? existingPayments
+          : advanceNum > 0
             ? [
                 {
                   id: `pay-${Date.now()}`,
@@ -335,9 +383,11 @@ export default function NewReservationModal({
               ]
             : [],
         avatar: initials || 'GU',
-        membership: selectedExistingGuestId ? 'Repeat Guest' : 'Direct Guest',
+        membership:
+          editingBooking?.membership ||
+          (selectedExistingGuestId ? 'Repeat Guest' : 'Direct Guest'),
         occasionTag: occasionTag.trim() || undefined,
-        totalSpend: advanceNum,
+        totalSpend: editingBooking?.totalSpend ?? finalAdvance,
         avgDailyRate: activeRoom.ratePerNight,
         notes: [
           conciergeRequest.trim() ||
@@ -351,15 +401,20 @@ export default function NewReservationModal({
         idProofType,
         idProofNumberMasked: idProofNumber.trim()
           ? `XXXX-${idProofNumber.trim().slice(-4)}`
-          : undefined,
-        idVerificationStatus: uploadedUrl || idProofNumber.trim() ? 'Verified' : 'Pending',
-        idDocumentUrl: uploadedUrl,
+          : editingBooking?.idProofNumberMasked,
+        idVerificationStatus:
+          uploadedUrl || idProofNumber.trim()
+            ? 'Verified'
+            : editingBooking?.idVerificationStatus || 'Pending',
+        idDocumentUrl: uploadedUrl || editingBooking?.idDocumentUrl,
         tentativeExpiresAt:
-          mode === 'tentative' ? new Date(Date.now() + 24 * 3600 * 1000).toISOString() : undefined,
-        stayHistory: [],
+          !editingBooking && mode === 'tentative'
+            ? new Date(Date.now() + 24 * 3600 * 1000).toISOString()
+            : editingBooking?.tentativeExpiresAt,
+        stayHistory: editingBooking?.stayHistory || [],
         invoice: {
           invoiceNumber: folioNo,
-          date: formatFullDate(getTodayISO()),
+          date: editingBooking?.invoice?.date || formatFullDate(getTodayISO()),
           items,
           subtotal: folio.taxableSubtotal,
           cgst: folio.cgst,
@@ -369,7 +424,7 @@ export default function NewReservationModal({
         },
       };
 
-      await onSubmitBooking(newBooking, activeRoom, mode === 'confirmed');
+      await onSubmitBooking(newBooking, activeRoom, !editingBooking && mode === 'confirmed');
       onClose();
     } catch (err) {
       setErrorMsg(err instanceof Error ? err.message : 'Unable to save reservation.');
@@ -389,7 +444,9 @@ export default function NewReservationModal({
             </div>
             <div>
               <h2 className="text-base font-extrabold tracking-tight leading-tight">
-                New Reservation / Walk-In
+                {editingBooking
+                  ? `Edit Reservation · ${editingBooking.bookingCode || editingBooking.id}`
+                  : 'New Reservation / Walk-In'}
               </h2>
               <p className="text-[11px] text-[#B7F2DC]">
                 Mykonos Cottage, Tarkarli · Live Room &amp; GST Allocation
@@ -996,14 +1053,16 @@ export default function NewReservationModal({
           </button>
 
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
-            <button
-              type="button"
-              disabled={submitting || !activeRoom}
-              onClick={() => handleCreateReservation('tentative')}
-              className="px-4 py-2.5 rounded-xl border border-amber-300 bg-amber-50 hover:bg-amber-100 text-amber-900 text-xs font-bold cursor-pointer disabled:opacity-50"
-            >
-              {submitting ? 'Saving...' : 'Save as Tentative Hold (24h)'}
-            </button>
+            {!editingBooking && (
+              <button
+                type="button"
+                disabled={submitting || !activeRoom}
+                onClick={() => handleCreateReservation('tentative')}
+                className="px-4 py-2.5 rounded-xl border border-amber-300 bg-amber-50 hover:bg-amber-100 text-amber-900 text-xs font-bold cursor-pointer disabled:opacity-50"
+              >
+                {submitting ? 'Saving...' : 'Save as Tentative Hold (24h)'}
+              </button>
+            )}
 
             <button
               type="button"
@@ -1012,9 +1071,13 @@ export default function NewReservationModal({
               className="px-5 py-2.5 rounded-xl bg-[#004B38] hover:bg-[#003D2E] text-white text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer shadow-sm disabled:opacity-50"
             >
               <CheckCircle2 className="w-3.5 h-3.5 text-[#B7F2DC]" />
-              <MessageSquare className="w-3.5 h-3.5 text-[#B7F2DC]" />
+              {!editingBooking && <MessageSquare className="w-3.5 h-3.5 text-[#B7F2DC]" />}
               <span>
-                {submitting ? 'Confirming...' : 'Confirm & Send WhatsApp Voucher'}
+                {submitting
+                  ? 'Saving...'
+                  : editingBooking
+                    ? 'Save Reservation Changes'
+                    : 'Confirm & Send WhatsApp Voucher'}
               </span>
             </button>
           </div>

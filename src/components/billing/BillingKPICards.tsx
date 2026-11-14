@@ -1,39 +1,43 @@
 import React from 'react';
-import { TrendingUp, Clock, ArrowUpRight, HelpCircle } from 'lucide-react';
+import { TrendingUp, Clock } from 'lucide-react';
 import { BillingInvoice } from '../../types';
 
 interface BillingKPICardsProps {
   invoices: BillingInvoice[];
-  netRevenue?: number;
-  collected?: number;
-  pending?: number;
-  gstLiable?: number;
-  refunds?: number;
-  refundsCount?: number;
+  netRevenue: number;
+  collected: number;
+  pending: number;
+  gstLiable: number;
+  refunds: number;
+  refundsCount: number;
   onFilterStatus?: (status: string) => void;
   activeFilter?: string;
 }
 
 export default function BillingKPICards({
   invoices,
-  netRevenue = 2450000,
-  collected = 2180000,
-  pending = 270000,
-  gstLiable = 441000,
-  refunds = 45000,
-  refundsCount = 3,
+  netRevenue,
+  collected,
+  pending,
+  gstLiable,
+  refunds,
+  refundsCount,
   onFilterStatus,
-  activeFilter
+  activeFilter,
 }: BillingKPICardsProps) {
-  // Format Indian Rupees helper (e.g. 24,50,000)
-  const formatINR = (val: number) => {
-    return new Intl.NumberFormat('en-IN').format(val);
-  };
+  const formatINR = (val: number) => new Intl.NumberFormat('en-IN').format(Math.round(val));
+
+  const paidCount = invoices.filter((i) => i.status === 'Paid').length;
+  const pendingCount = invoices.filter((i) => i.status === 'Pending' || i.status === 'Partial').length;
+  const taxableSum = invoices
+    .filter((i) => i.status !== 'Refunded')
+    .reduce((sum, i) => sum + (Number(i.subtotal) || 0), 0);
+  const avgGstPct = taxableSum > 0 ? Math.round((gstLiable / taxableSum) * 100) : 0;
 
   return (
     <div id="billing-kpi-grid" className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5">
       {/* 1. NET REVENUE CARD */}
-      <div 
+      <div
         id="kpi-card-net-revenue"
         onClick={() => onFilterStatus && onFilterStatus('ALL')}
         className="bg-white rounded-2xl p-5 border border-slate-200/80 shadow-xs hover:shadow-md transition-all duration-200 flex flex-col justify-between cursor-pointer group"
@@ -51,18 +55,20 @@ export default function BillingKPICards({
           </div>
         </div>
         <div className="mt-3.5 flex items-center gap-1">
-          <span className="text-xs font-semibold text-emerald-600">
-            +12.4% vs last month
+          <span className="text-xs font-semibold text-emerald-700">
+            {invoices.length} {invoices.length === 1 ? 'invoice' : 'invoices'} in ledger
           </span>
         </div>
       </div>
 
       {/* 2. COLLECTED CARD */}
-      <div 
+      <div
         id="kpi-card-collected"
         onClick={() => onFilterStatus && onFilterStatus('Paid')}
         className={`bg-white rounded-2xl p-5 border transition-all duration-200 flex flex-col justify-between cursor-pointer group ${
-          activeFilter === 'Paid' ? 'border-[#0c4033] ring-2 ring-[#0c4033]/15 shadow-sm' : 'border-slate-200/80 hover:shadow-md'
+          activeFilter === 'Paid'
+            ? 'border-[#0c4033] ring-2 ring-[#0c4033]/15 shadow-sm'
+            : 'border-slate-200/80 hover:shadow-md'
         }`}
       >
         <div>
@@ -76,18 +82,20 @@ export default function BillingKPICards({
             </span>
           </div>
         </div>
-        <div className="mt-3.5">
-          {/* Progress bar pill */}
+        <div className="mt-3.5 flex items-center justify-between gap-2">
           <div className="h-1.5 w-16 bg-[#0c4033] rounded-full" />
+          <span className="text-[11px] text-slate-500 font-medium">{paidCount} settled</span>
         </div>
       </div>
 
       {/* 3. PENDING CARD */}
-      <div 
+      <div
         id="kpi-card-pending"
         onClick={() => onFilterStatus && onFilterStatus('Pending')}
         className={`bg-white rounded-2xl p-5 border transition-all duration-200 flex flex-col justify-between cursor-pointer group ${
-          activeFilter === 'Pending' ? 'border-amber-700 ring-2 ring-amber-700/15 shadow-sm' : 'border-slate-200/80 hover:shadow-md'
+          activeFilter === 'Pending'
+            ? 'border-amber-700 ring-2 ring-amber-700/15 shadow-sm'
+            : 'border-slate-200/80 hover:shadow-md'
         }`}
       >
         <div>
@@ -101,14 +109,14 @@ export default function BillingKPICards({
             </span>
           </div>
         </div>
-        <div className="mt-3.5">
-          {/* Progress bar pill */}
+        <div className="mt-3.5 flex items-center justify-between gap-2">
           <div className="h-1.5 w-10 bg-amber-800/90 rounded-full" />
+          <span className="text-[11px] text-slate-500 font-medium">{pendingCount} open</span>
         </div>
       </div>
 
       {/* 4. GST LIABLE CARD */}
-      <div 
+      <div
         id="kpi-card-gst"
         onClick={() => onFilterStatus && onFilterStatus('ALL')}
         className="bg-white rounded-2xl p-5 border border-slate-200/80 shadow-xs hover:shadow-md transition-all duration-200 flex flex-col justify-between cursor-pointer group"
@@ -126,17 +134,19 @@ export default function BillingKPICards({
         </div>
         <div className="mt-3">
           <span className="inline-block px-2.5 py-0.5 bg-indigo-50 text-indigo-700 text-[11px] font-semibold rounded-md border border-indigo-100/80">
-            18% Avg
+            {avgGstPct > 0 ? `${avgGstPct}% Effective` : 'SAC 9963'}
           </span>
         </div>
       </div>
 
       {/* 5. REFUNDS CARD */}
-      <div 
+      <div
         id="kpi-card-refunds"
         onClick={() => onFilterStatus && onFilterStatus('Refunded')}
         className={`bg-white rounded-2xl p-5 border transition-all duration-200 flex flex-col justify-between cursor-pointer group ${
-          activeFilter === 'Refunded' ? 'border-red-600 ring-2 ring-red-600/15 shadow-sm' : 'border-slate-200/80 hover:shadow-md'
+          activeFilter === 'Refunded'
+            ? 'border-red-600 ring-2 ring-red-600/15 shadow-sm'
+            : 'border-slate-200/80 hover:shadow-md'
         }`}
       >
         <div>
@@ -152,7 +162,7 @@ export default function BillingKPICards({
         </div>
         <div className="mt-3.5 flex items-center gap-1.5 text-slate-500 text-xs font-normal">
           <Clock className="w-3.5 h-3.5 text-slate-400" />
-          <span>{refundsCount} claims</span>
+          <span>{refundsCount} {refundsCount === 1 ? 'claim' : 'claims'}</span>
         </div>
       </div>
     </div>

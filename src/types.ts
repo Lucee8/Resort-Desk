@@ -174,26 +174,102 @@ export interface OccupancyDay {
   bookings: number;
 }
 
+export type BookingStatusType = 'Confirmed' | 'Checked-in' | 'Checked-out' | 'Pending' | 'Cancelled';
+
+export type BookingPaymentMethod = 'UPI / GPay' | 'Cash' | 'Card' | 'NEFT / IMPS';
+
+export type BookingSourceChannel =
+  | 'Direct Walk-in / Phone'
+  | 'WhatsApp Bot (Myra AI)'
+  | 'Booking.com'
+  | 'Airbnb'
+  | 'MakeMyTrip';
+
+export type MealPlanType =
+  | 'Room Only'
+  | 'CP (Breakfast)'
+  | 'MAP (Breakfast & Dinner)'
+  | 'AP (All Meals)';
+
+export interface BookingPaymentEntry {
+  id: string;
+  amount: number;
+  method: BookingPaymentMethod;
+  referenceId: string;
+  recordedAt: string;
+  recordedBy: string;
+  type: 'Advance' | 'Settlement' | 'Refund';
+}
+
+export interface RoomUnit {
+  id: string;
+  roomNumber: string;
+  roomName: string;
+  categoryName: string;
+  subtitle: string;
+  floorOrWing: string;
+  ratePerNight: number;
+  maxAdults: number;
+  maxChildren: number;
+  status: 'Available' | 'Occupied' | 'Deep Clean' | 'Maintenance';
+  maintenanceNote?: string;
+  amenities: string[];
+  thumbnailUrl?: string;
+}
+
 export interface Booking {
   id: string;
+  bookingCode?: string;
+  folioNumber?: string;
+  guestId?: string;
   guestName: string;
   guestEmail: string;
   guestPhone: string;
+  guestCity?: string;
+  roomId?: string;
   roomNumber: string;
   roomType: string;
   roomCategory: string; // 'King Bed', 'Terrace', etc.
   startDate: string;
   endDate: string;
+  checkInDateISO?: string;
+  checkOutDateISO?: string;
+  arrivalTime?: string;
+  checkoutTime?: string;
   nights: number;
+  adults?: number;
+  children?: number;
+  childrenNotes?: string;
+  mealPlan?: MealPlanType;
+  source?: BookingSourceChannel;
   amount: number;
-  bookingStatus: 'Confirmed' | 'Pending' | 'Cancelled';
+  advancePaid?: number;
+  balanceDue?: number;
+  discount?: number;
+  gstRateApplied?: number;
+  sacCode?: string;
+  bookingStatus: BookingStatusType;
   paymentStatus: 'Paid' | 'Unpaid' | 'Partial';
+  payments?: BookingPaymentEntry[];
   avatar: string;
+  avatarUrl?: string;
   membership: string; // "Platinum Member", "Gold Member", "Regular Guest", etc.
+  occasionTag?: string;
   totalSpend: number;
   avgDailyRate: number;
   notes: string[];
+  conciergeRequest?: string;
+  housekeepingNote?: string;
+  internalStaffNote?: string;
   preferences: string[];
+  idProofType?: 'Aadhaar Card' | 'Passport' | 'Driving License' | 'Voter ID';
+  idProofNumberMasked?: string;
+  idVerificationStatus?: 'Verified' | 'Pending' | 'Unverified';
+  idDocumentUrl?: string;
+  whatsappStatus?: string;
+  tentativeExpiresAt?: string;
+  createdAt?: string;
+  updatedAt?: string;
   stayHistory: {
     id: string;
     room: string;
@@ -206,10 +282,18 @@ export interface Booking {
   invoice: {
     invoiceNumber: string;
     date: string;
-    items: { description: string; qty: number; price: number; amount: number }[];
+    items: {
+      description: string;
+      qty: number;
+      price: number;
+      amount: number;
+      sacCode?: string;
+      gstRate?: number;
+    }[];
     subtotal: number;
     cgst: number;
     sgst: number;
+    igst?: number;
     total: number;
   };
 }
@@ -937,6 +1021,12 @@ export interface WhatsAppMessageLog {
   aiHandled?: boolean;
   aiConfidence?: number;
   templateUsed?: string;
+  wamid?: string | null;
+  errorCode?: string | null;
+  errorReason?: string | null;
+  retryCount?: number;
+  retryable?: boolean;
+  createdAtISO?: string;
 }
 
 export interface MyraAIWorkflowInsight {
@@ -1455,3 +1545,31 @@ export interface ResortDeskSettings {
   appearance: AppearanceSettings;
   emergencyContacts: EmergencyContactItem[];
 }
+
+export type EmailTemplateCategory =
+  | 'booking_confirmation'
+  | 'booking_voucher'
+  | 'gst_invoice'
+  | 'payment_receipt'
+  | 'booking_cancellation'
+  | 'checkin_info'
+  | 'checkout_info';
+
+export interface EmailLogItem {
+  id: string;
+  templateType: EmailTemplateCategory;
+  guestName: string;
+  guestEmail: string;
+  bookingId?: string | null;
+  bookingCode?: string | null;
+  invoiceNumber?: string | null;
+  subject: string;
+  provider: string;
+  messageId?: string | null;
+  status: 'sent' | 'failed';
+  errorReason?: string | null;
+  retryCount?: number;
+  retryable?: boolean;
+  createdAtISO: string;
+}
+

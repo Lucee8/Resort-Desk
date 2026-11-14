@@ -1,5 +1,14 @@
 import React, { useState } from 'react';
-import { X, Printer, MessageSquare, CheckCircle2, FileText } from 'lucide-react';
+import {
+  X,
+  Printer,
+  MessageSquare,
+  CheckCircle2,
+  FileText,
+  Mail,
+  Loader2,
+  AlertCircle,
+} from 'lucide-react';
 import { Booking } from '../../types';
 import {
   buildBookingVoucherMessage,
@@ -10,6 +19,10 @@ import {
   resolveBookingDatesISO,
 } from '../../utils/bookingUtils';
 import { initialResortProfile } from '../../data/settingsData';
+import {
+  CloudDispatchResponse,
+  sendEmailViaCloudFunction,
+} from '../../services/messagingService';
 
 interface PrintableInvoiceVoucherModalProps {
   booking: Booking;
@@ -23,11 +36,52 @@ export default function PrintableInvoiceVoucherModal({
   onClose,
 }: PrintableInvoiceVoucherModalProps) {
   const [docMode, setDocMode] = useState<'invoice' | 'voucher'>(initialMode);
+  const [sendingEmail, setSendingEmail] = useState(false);
+  const [emailStatus, setEmailStatus] = useState<CloudDispatchResponse | null>(null);
   const gstSettings = getPropertyBillingGSTSettings();
   const { checkInISO, checkOutISO } = resolveBookingDatesISO(booking);
   const advancePaid = booking.advancePaid ?? (booking.paymentStatus === 'Paid' ? booking.amount : 0);
   const balanceDue = Math.max(0, booking.balanceDue ?? booking.amount - advancePaid);
   const waUrl = buildWhatsAppLink(booking.guestPhone, buildBookingVoucherMessage(booking));
+
+  const handleEmailDocument = async () => {
+    if (!booking.guestEmail) {
+      setEmailStatus({
+        ok: false,
+        status: 'error',
+        message: 'No guest email address is recorded on this reservation.',
+      });
+      return;
+    }
+    setSendingEmail(true);
+    setEmailStatus(null);
+    const res = await sendEmailViaCloudFunction({
+      templateType: docMode === 'invoice' ? 'gst_invoice' : 'booking_voucher',
+      guestName: booking.guestName,
+      guestEmail: booking.guestEmail,
+      bookingId: booking.id,
+      bookingCode: booking.bookingCode || booking.id,
+      folioNumber: booking.folioNumber || booking.invoice.invoiceNumber,
+      invoiceNumber: booking.invoice.invoiceNumber,
+      roomNumber: booking.roomNumber,
+      roomCategory: booking.roomCategory,
+      checkInDate: formatFullDate(checkInISO),
+      checkOutDate: formatFullDate(checkOutISO),
+      checkInTime: booking.arrivalTime || '02:00 PM',
+      checkOutTime: booking.checkoutTime || '11:00 AM',
+      nights: booking.nights,
+      totalAmount: booking.amount,
+      advancePaid,
+      balanceDue,
+      gstRate: booking.gstRateApplied ?? gstSettings.defaultGstRate,
+      sacCode: booking.sacCode ?? '996311',
+      taxableSubtotal: booking.invoice.subtotal,
+      cgst: booking.invoice.cgst,
+      sgst: booking.invoice.sgst,
+    });
+    setEmailStatus(res);
+    setSendingEmail(false);
+  };
 
   return (
     <div className="fixed inset-0 z-50 bg-[#17221F]/60 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4 print:p-0 print:bg-white">
@@ -55,7 +109,20 @@ export default function PrintableInvoiceVoucherModal({
             </button>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              disabled={sendingEmail}
+              onClick={handleEmailDocument}
+              className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-900 disabled:opacity-50 text-white text-xs font-bold inline-flex items-center gap-1.5 cursor-pointer"
+            >
+              {sendingEmail ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <Mail className="w-3.5 h-3.5" />
+              )}
+              <span>{sendingEmail ? 'Emailing...' : 'Email Guest'}</span>
+            </button>
             <a
               href={waUrl}
               target="_blank"
@@ -82,6 +149,23 @@ export default function PrintableInvoiceVoucherModal({
             </button>
           </div>
         </div>
+
+        {emailStatus && (
+          <div
+            className={`mx-4 sm:mx-8 mt-3 p-3 rounded-xl border text-xs flex items-start gap-2 print:hidden ${
+              emailStatus.ok
+                ? 'bg-emerald-50 border-emerald-200 text-emerald-900'
+                : 'bg-amber-50 border-amber-200 text-amber-900'
+            }`}
+          >
+            {emailStatus.ok ? (
+              <CheckCircle2 className="w-4 h-4 text-emerald-700 shrink-0 mt-0.5" />
+            ) : (
+              <AlertCircle className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
+            )}
+            <span>{emailStatus.message}</span>
+          </div>
+        )}
 
         {/* Printable Document Body */}
         <div className="flex-1 overflow-y-auto p-4 sm:p-8 print:p-4">

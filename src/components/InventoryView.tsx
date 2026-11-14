@@ -1,21 +1,21 @@
-import React, { useState } from 'react';
-import { 
-  mockInventoryItems, 
-  mockPurchaseOrders, 
-  mockSuppliers, 
-  mockInventoryAlerts, 
-  mockInventoryAIInsights 
-} from '../data/inventoryData';
-import { 
-  InventoryItem, 
-  PurchaseOrder, 
-  InventorySupplier, 
-  InventoryCategory, 
-  InventoryUserRole, 
-  StockMovementType, 
+import React, { useState, useEffect, useMemo } from 'react';
+import {
+  InventoryItem,
+  PurchaseOrder,
+  InventorySupplier,
+  InventoryCategory,
+  InventoryUserRole,
+  StockMovementType,
   InventoryAIInsight,
-  StockMovement
+  StockMovement,
 } from '../types';
+import { useAuth } from '../context/AuthContext';
+import {
+  deleteCollectionDoc,
+  subscribeCollection,
+  upsertCollectionDoc,
+} from '../services/resortDataService';
+import { formatShortDate, getTodayISO } from '../utils/bookingUtils';
 
 import InventoryHeader from './inventory/InventoryHeader';
 import LowStockAlertBanner from './inventory/LowStockAlertBanner';
@@ -36,21 +36,24 @@ import InventoryAuditModal from './inventory/InventoryAuditModal';
 import LowStockAlertsDrawer from './inventory/LowStockAlertsDrawer';
 import InventoryAICopilot from './inventory/InventoryAICopilot';
 
-import { CheckCircle2, AlertTriangle, Info } from 'lucide-react';
+interface InventoryViewProps {
+  triggerToast: (msg: string) => void;
+}
 
-export default function InventoryView() {
-  // Core Entities State
-  const [items, setItems] = useState<InventoryItem[]>(mockInventoryItems);
-  const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>(mockPurchaseOrders);
-  const [suppliers, setSuppliers] = useState<InventorySupplier[]>(mockSuppliers);
-  const [aiInsights, setAiInsights] = useState<InventoryAIInsight[]>(mockInventoryAIInsights);
-  
-  // Navigation & Filtering State
+export default function InventoryView({ triggerToast }: InventoryViewProps) {
+  const { user, firestoreStatus } = useAuth();
+  const operatorName =
+    user?.displayName || user?.email?.split('@')[0] || 'Mykonos Storekeeper';
+
+  const [items, setItems] = useState<InventoryItem[]>([]);
+  const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>([]);
+  const [suppliers, setSuppliers] = useState<InventorySupplier[]>([]);
+  const [aiInsights, setAiInsights] = useState<InventoryAIInsight[]>([]);
+
   const [userRole, setUserRole] = useState<InventoryUserRole>('Storekeeper');
   const [selectedCategory, setSelectedCategory] = useState<InventoryCategory>('All');
   const [globalSearch, setGlobalSearch] = useState<string>('');
 
-  // Modals & Drawers Visibility State
   const [selectedItemForDetail, setSelectedItemForDetail] = useState<InventoryItem | null>(null);
   const [itemForMovement, setItemForMovement] = useState<InventoryItem | null>(null);
   const [isMovementModalOpen, setIsMovementModalOpen] = useState(false);
@@ -63,85 +66,106 @@ export default function InventoryView() {
   const [isAlertsDrawerOpen, setIsAlertsDrawerOpen] = useState(false);
   const [isAICopilotOpen, setIsAICopilotOpen] = useState(false);
 
-  // Toast notification state
-  const [toastMessage, setToastMessage] = useState<{ text: string; type: 'success' | 'warning' | 'info' } | null>(null);
+  useEffect(() => {
+    if (firestoreStatus === 'permission-denied') return;
+    const unsubItems = subscribeCollection<InventoryItem>('inventoryItems', setItems);
+    const unsubPOs = subscribeCollection<PurchaseOrder>('purchaseOrders', setPurchaseOrders);
+    const unsubSups = subscribeCollection<InventorySupplier>('inventorySuppliers', setSuppliers);
+    const unsubAI = subscribeCollection<InventoryAIInsight>('inventoryAIInsights', setAiInsights);
+    return () => {
+      unsubItems();
+      unsubPOs();
+      unsubSups();
+      unsubAI();
+    };
+  }, [firestoreStatus]);
 
-  const showToast = (text: string, type: 'success' | 'warning' | 'info' = 'success') => {
-    setToastMessage({ text, type });
-    setTimeout(() => {
-      setToastMessage(null);
-    }, 4000);
-  };
-
-  // Helper to re-evaluate safety level
   const computeSafetyLevel = (current: number, min: number) => {
-    if (current <= 0) return 'Out of Stock';
-    if (current <= min * 0.5) return 'Critical';
-    if (current <= min) return 'Low';
-    return 'Healthy';
+    if (current <= 0) return 'Out of Stock' as const;
+    if (current <= min * 0.5) return 'Critical' as const;
+    if (current <= min) return 'Low' as const;
+    return 'Healthy' as const;
   };
 
-  // Handlers: Log Stock Movement
+  const filteredItems = useMemo(() => {
+    if (!globalSearch.trim()) return items;
+    const q = globalSearch.toLowerCase();
+    return items.filter(
+      (i) =>
+        i.name.toLowerCase().includes(q) ||
+        i.sku.toLowerCase().includes(q) ||
+        i.supplier.toLowerCase().includes(q) ||
+        i.category.toLowerCase().includes(q)
+    );
+  }, [items, globalSearch]);
+
   const handleOpenMovement = (item: InventoryItem) => {
     setItemForMovement(item);
     setIsMovementModalOpen(true);
   };
 
-  const handleApplyMovement = (
+  const handleApplyMovement = async (
     itemId: string,
     quantityDelta: number,
     type: StockMovementType,
-    user: string,
+    actor: string,
     reference: string,
     notes: string
   ) => {
-    setItems(prev => prev.map(item => {
-      if (item.id !== itemId) return item;
-      const newStock = Math.max(0, item.currentStock + quantityDelta);
-      const newTotalValue = newStock * item.costPerUnit;
-      const newSafety = computeSafetyLevel(newStock, item.minStock);
+    const target = items.find((i) => i.id === itemId);
+    if (!target) return;
 
-      const newMovement: StockMovement = {
-        id: `mov-${Date.now()}`,
-        date: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-        type,
-        quantity: quantityDelta,
-        user,
-        role: userRole,
-        reference,
-        notes
-      };
+    const newStock = Math.max(0, target.currentStock + quantityDelta);
+    const newTotalValue = newStock * target.costPerUnit;
+    const newSafety = computeSafetyLevel(newStock, target.minStock);
 
-      const updated = {
-        ...item,
-        currentStock: newStock,
-        totalValue: newTotalValue,
-        safetyLevel: newSafety as any,
-        movements: [newMovement, ...(item.movements || [])]
-      };
+    const newMovement: StockMovement = {
+      id: `mov-${Date.now()}`,
+      date: formatShortDate(getTodayISO()),
+      type,
+      quantity: quantityDelta,
+      user: actor || operatorName,
+      role: userRole,
+      reference,
+      notes,
+    };
 
-      if (selectedItemForDetail?.id === itemId) {
-        setSelectedItemForDetail(updated);
-      }
-      return updated;
-    }));
+    const updated: InventoryItem = {
+      ...target,
+      currentStock: newStock,
+      totalValue: newTotalValue,
+      safetyLevel: newSafety,
+      movements: [newMovement, ...(target.movements || [])],
+    };
 
-    showToast(`Stock updated for ${quantityDelta > 0 ? '+' : ''}${quantityDelta} units (${type})`);
+    try {
+      await upsertCollectionDoc('inventoryItems', updated);
+      if (selectedItemForDetail?.id === itemId) setSelectedItemForDetail(updated);
+      triggerToast(
+        `Stock updated (${quantityDelta > 0 ? '+' : ''}${quantityDelta} units • ${type})`
+      );
+    } catch (err) {
+      triggerToast(
+        err instanceof Error ? err.message : 'Failed to save stock movement to Firestore.'
+      );
+    }
   };
 
-  // Handlers: Quick Restock PO
-  const handleQuickRestock = (item: InventoryItem, qty?: number) => {
+  const handleQuickRestock = async (item: InventoryItem, qty?: number) => {
     const orderQty = qty || item.reorderQuantity;
-    const poNum = `PO-2023-${Math.floor(200 + Math.random() * 700)}`;
+    const year = new Date().getFullYear();
+    const poNum = `PO-${year}-${Date.now().toString().slice(-4)}`;
     const lineTotal = orderQty * item.costPerUnit;
     const taxAmt = Math.round(lineTotal * 0.18);
     const grandTotal = lineTotal + taxAmt;
+    const expectedDate = new Date(Date.now() + 3 * 86400000).toISOString().slice(0, 10);
+
     const newPO: PurchaseOrder = {
       id: `po-${Date.now()}`,
       poNumber: poNum,
       supplierName: item.supplier,
-      orderDate: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
-      expectedDelivery: new Date(Date.now() + 3 * 86400000).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+      orderDate: formatShortDate(getTodayISO()),
+      expectedDelivery: formatShortDate(expectedDate),
       status: 'Ordered',
       items: [
         {
@@ -150,202 +174,281 @@ export default function InventoryView() {
           quantity: orderQty,
           unitPrice: item.costPerUnit,
           total: lineTotal,
-          unit: item.unit
-        }
+          unit: item.unit,
+        },
       ],
       subtotal: lineTotal,
       tax: taxAmt,
       discount: 0,
       totalAmount: grandTotal,
       paymentStatus: 'Pending',
-      notes: 'Generated via AI 1-Click Fast Reorder'
+      notes: 'Generated via Quick Restock',
     };
 
-    setPurchaseOrders(prev => [newPO, ...prev]);
-    showToast(`Purchase order ${poNum} created for ${item.name} (${orderQty} ${item.unit})`);
+    try {
+      await upsertCollectionDoc('purchaseOrders', newPO);
+      triggerToast(
+        `Purchase Order ${poNum} created for ${item.name} (${orderQty} ${item.unit})`
+      );
+    } catch (err) {
+      triggerToast(
+        err instanceof Error ? err.message : 'Failed to create Purchase Order.'
+      );
+    }
   };
 
-  // Handlers: Add New Item
-  const handleAddNewItem = (newItemData: Omit<InventoryItem, 'id' | 'movements' | 'totalValue' | 'safetyLevel'>) => {
+  const handleAddNewItem = async (
+    newItemData: Omit<InventoryItem, 'id' | 'movements' | 'totalValue' | 'safetyLevel'>
+  ) => {
     const totalValue = newItemData.currentStock * newItemData.costPerUnit;
     const safetyLevel = computeSafetyLevel(newItemData.currentStock, newItemData.minStock);
     const newItem: InventoryItem = {
       ...newItemData,
       id: `inv-${Date.now()}`,
       totalValue,
-      safetyLevel: safetyLevel as any,
+      safetyLevel,
       movements: [
         {
           id: `mov-init-${Date.now()}`,
-          date: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+          date: formatShortDate(getTodayISO()),
           type: 'Purchase',
           quantity: newItemData.currentStock,
-          user: userRole,
+          user: operatorName,
           role: userRole,
-          reference: 'Initial Stock Onboarding'
-        }
-      ]
+          reference: 'Initial Stock Onboarding',
+        },
+      ],
     };
 
-    setItems(prev => [newItem, ...prev]);
-    showToast(`New item "${newItem.name}" added to operational supplies.`);
-  };
-
-  // Handlers: Submit Full PO
-  const handleSubmitPO = (newPOData: Omit<PurchaseOrder, 'id'>, autoReceiveStock: boolean) => {
-    const newPO: PurchaseOrder = {
-      ...newPOData,
-      id: `po-${Date.now()}`
-    };
-
-    setPurchaseOrders(prev => [newPO, ...prev]);
-
-    if (autoReceiveStock) {
-      // Add items to stock immediately
-      setItems(prev => prev.map(item => {
-        const lineItem = newPO.items.find(i => i.itemId === item.id || i.name === item.name);
-        if (!lineItem) return item;
-        const newStock = item.currentStock + lineItem.quantity;
-        const newTotalValue = newStock * item.costPerUnit;
-        const newSafety = computeSafetyLevel(newStock, item.minStock);
-        return {
-          ...item,
-          currentStock: newStock,
-          totalValue: newTotalValue,
-          safetyLevel: newSafety as any,
-          lastRestocked: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
-          movements: [
-            {
-              id: `mov-po-${Date.now()}-${item.id}`,
-              date: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-              type: 'Purchase',
-              quantity: lineItem.quantity,
-              user: userRole,
-              role: userRole,
-              reference: newPO.poNumber,
-              notes: 'Stock received and inspected'
-            },
-            ...(item.movements || [])
-          ]
-        };
-      }));
-      showToast(`Purchase ${newPO.poNumber} received and stock updated immediately!`);
-    } else {
-      showToast(`Purchase Order ${newPO.poNumber} logged successfully.`);
+    try {
+      await upsertCollectionDoc('inventoryItems', newItem);
+      triggerToast(`Item "${newItem.name}" added to Firestore inventory.`);
+    } catch (err) {
+      triggerToast(
+        err instanceof Error ? err.message : 'Failed to add inventory item.'
+      );
     }
   };
 
-  // Handlers: Mark PO as Received
-  const handleMarkPOAsReceived = (poId: string) => {
-    const targetPO = purchaseOrders.find(p => p.id === poId);
+  const handleSubmitPO = async (
+    newPOData: Omit<PurchaseOrder, 'id'>,
+    autoReceiveStock: boolean
+  ) => {
+    const newPO: PurchaseOrder = {
+      ...newPOData,
+      id: `po-${Date.now()}`,
+    };
+
+    try {
+      await upsertCollectionDoc('purchaseOrders', newPO);
+
+      if (autoReceiveStock) {
+        const updates: Promise<void>[] = [];
+        for (const item of items) {
+          const lineItem = newPO.items.find(
+            (i) => i.itemId === item.id || i.name === item.name
+          );
+          if (!lineItem) continue;
+          const newStock = item.currentStock + lineItem.quantity;
+          updates.push(
+            upsertCollectionDoc('inventoryItems', {
+              ...item,
+              currentStock: newStock,
+              totalValue: newStock * item.costPerUnit,
+              safetyLevel: computeSafetyLevel(newStock, item.minStock),
+              lastRestocked: formatShortDate(getTodayISO()),
+              movements: [
+                {
+                  id: `mov-po-${Date.now()}-${item.id}`,
+                  date: formatShortDate(getTodayISO()),
+                  type: 'Purchase',
+                  quantity: lineItem.quantity,
+                  user: operatorName,
+                  role: userRole,
+                  reference: newPO.poNumber,
+                  notes: 'Stock received and inspected',
+                },
+                ...(item.movements || []),
+              ],
+            })
+          );
+        }
+        await Promise.all(updates);
+        triggerToast(`Purchase ${newPO.poNumber} received & stock updated in Firestore.`);
+      } else {
+        triggerToast(`Purchase Order ${newPO.poNumber} saved to Firestore.`);
+      }
+    } catch (err) {
+      triggerToast(
+        err instanceof Error ? err.message : 'Failed to log Purchase Order.'
+      );
+    }
+  };
+
+  const handleMarkPOAsReceived = async (poId: string) => {
+    const targetPO = purchaseOrders.find((p) => p.id === poId);
     if (!targetPO) return;
 
-    setPurchaseOrders(prev => prev.map(po => {
-      if (po.id !== poId) return po;
-      return { ...po, status: 'Received' };
-    }));
+    try {
+      await upsertCollectionDoc('purchaseOrders', {
+        ...targetPO,
+        status: 'Received',
+      });
 
-    // Update stock levels for line items
-    setItems(prev => prev.map(item => {
-      const lineItem = targetPO.items.find(i => i.itemId === item.id || i.sku === item.sku);
-      if (!lineItem) return item;
-      const newStock = item.currentStock + lineItem.quantity;
-      const newTotalValue = newStock * item.costPerUnit;
-      const newSafety = computeSafetyLevel(newStock, item.minStock);
-      return {
-        ...item,
-        currentStock: newStock,
-        totalValue: newTotalValue,
-        safetyLevel: newSafety as any,
-        lastRestocked: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
-        movements: [
-          {
-            id: `mov-po-rec-${Date.now()}-${item.id}`,
-            date: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-            type: 'Purchase',
-            quantity: lineItem.quantity,
-            user: userRole,
-            role: userRole,
-            reference: targetPO.poNumber,
-            notes: 'Goods received at central loading bay'
-          },
-          ...(item.movements || [])
-        ]
-      };
-    }));
-
-    showToast(`PO ${targetPO.poNumber} marked as Received. Inventory stock incremented.`);
+      const updates: Promise<void>[] = [];
+      for (const item of items) {
+        const lineItem = targetPO.items.find(
+          (i) => i.itemId === item.id || i.sku === item.sku
+        );
+        if (!lineItem) continue;
+        const newStock = item.currentStock + lineItem.quantity;
+        updates.push(
+          upsertCollectionDoc('inventoryItems', {
+            ...item,
+            currentStock: newStock,
+            totalValue: newStock * item.costPerUnit,
+            safetyLevel: computeSafetyLevel(newStock, item.minStock),
+            lastRestocked: formatShortDate(getTodayISO()),
+            movements: [
+              {
+                id: `mov-po-rec-${Date.now()}-${item.id}`,
+                date: formatShortDate(getTodayISO()),
+                type: 'Purchase',
+                quantity: lineItem.quantity,
+                user: operatorName,
+                role: userRole,
+                reference: targetPO.poNumber,
+                notes: 'Goods received at store desk',
+              },
+              ...(item.movements || []),
+            ],
+          })
+        );
+      }
+      await Promise.all(updates);
+      triggerToast(`PO ${targetPO.poNumber} marked Received & stock incremented.`);
+    } catch (err) {
+      triggerToast(
+        err instanceof Error ? err.message : 'Failed to receive Purchase Order.'
+      );
+    }
   };
 
-  // Handlers: Physical Audit Reconciliation
-  const handleApplyReconciliation = (updates: { itemId: string; newStock: number; reason: string }[]) => {
-    setItems(prev => prev.map(item => {
-      const u = updates.find(x => x.itemId === item.id);
-      if (!u) return item;
-      const diff = u.newStock - item.currentStock;
-      const newTotalValue = u.newStock * item.costPerUnit;
-      const newSafety = computeSafetyLevel(u.newStock, item.minStock);
-      return {
-        ...item,
-        currentStock: u.newStock,
-        totalValue: newTotalValue,
-        safetyLevel: newSafety as any,
-        movements: [
-          {
-            id: `mov-audit-${Date.now()}-${item.id}`,
-            date: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-            type: 'Adjustment',
-            quantity: diff,
-            user: userRole,
-            role: userRole,
-            reference: 'Physical Stock Count Reconciliation',
-            notes: u.reason
-          },
-          ...(item.movements || [])
-        ]
-      };
-    }));
-
-    showToast(`Physical audit applied. ${updates.length} items reconciled.`);
+  const handleApplyReconciliation = async (
+    updates: { itemId: string; newStock: number; reason: string }[]
+  ) => {
+    try {
+      await Promise.all(
+        updates.map(async (u) => {
+          const item = items.find((i) => i.id === u.itemId);
+          if (!item) return;
+          const diff = u.newStock - item.currentStock;
+          await upsertCollectionDoc('inventoryItems', {
+            ...item,
+            currentStock: u.newStock,
+            totalValue: u.newStock * item.costPerUnit,
+            safetyLevel: computeSafetyLevel(u.newStock, item.minStock),
+            movements: [
+              {
+                id: `mov-audit-${Date.now()}-${item.id}`,
+                date: formatShortDate(getTodayISO()),
+                type: 'Adjustment',
+                quantity: diff,
+                user: operatorName,
+                role: userRole,
+                reference: 'Physical Stock Count Reconciliation',
+                notes: u.reason,
+              },
+              ...(item.movements || []),
+            ],
+          });
+        })
+      );
+      triggerToast(`Physical audit saved to Firestore (${updates.length} items reconciled).`);
+    } catch (err) {
+      triggerToast(
+        err instanceof Error ? err.message : 'Failed to save stock reconciliation.'
+      );
+    }
   };
 
-  // Handlers: Bulk Reorder Critical
-  const handleBulkRestockCritical = (criticalList: InventoryItem[]) => {
-    criticalList.forEach(item => {
-      handleQuickRestock(item);
-    });
+  const handleBulkRestockCritical = async (criticalList: InventoryItem[]) => {
+    for (const item of criticalList) {
+      await handleQuickRestock(item);
+    }
     setIsAlertsDrawerOpen(false);
-    showToast(`Bulk purchase orders initiated for all ${criticalList.length} critical supplies.`);
   };
 
-  // Handlers: Delete Item
-  const handleDeleteItem = (itemId: string) => {
-    setItems(prev => prev.filter(i => i.id !== itemId));
-    showToast('Inventory item removed from active catalog.', 'info');
+  const handleDeleteItem = async (itemId: string) => {
+    try {
+      await deleteCollectionDoc('inventoryItems', itemId);
+      if (selectedItemForDetail?.id === itemId) setSelectedItemForDetail(null);
+      triggerToast('Inventory item deleted from Firestore.');
+    } catch (err) {
+      triggerToast(
+        err instanceof Error ? err.message : 'Failed to delete inventory item.'
+      );
+    }
   };
 
-  // KPI Calculations
+  const handleExportCSV = () => {
+    const header = [
+      'SKU',
+      'Name',
+      'Category',
+      'Current Stock',
+      'Unit',
+      'Min Stock',
+      'Unit Cost (INR)',
+      'Total Value (INR)',
+      'Safety Level',
+      'Supplier',
+    ];
+    const rows = items.map((i) => [
+      i.sku,
+      i.name,
+      i.category,
+      String(i.currentStock),
+      i.unit,
+      String(i.minStock),
+      String(i.costPerUnit),
+      String(i.totalValue),
+      i.safetyLevel,
+      i.supplier,
+    ]);
+    const csv = [header, ...rows]
+      .map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(','))
+      .join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `mykonos-inventory-${getTodayISO()}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    triggerToast(`Exported ${items.length} inventory SKUs to CSV.`);
+  };
+
   const totalItemsCount = items.reduce((sum, item) => sum + item.currentStock, 0);
-  const criticalItemsCount = items.filter(i => i.safetyLevel === 'Critical' || i.safetyLevel === 'Low').length;
-  const recentDeliveriesCount = purchaseOrders.filter(p => p.status === 'Received').length;
-  const pendingOrdersCount = purchaseOrders.filter(p => p.status === 'Ordered' || p.status === 'In Transit' || p.status === 'Delayed').length;
+  const criticalItemsCount = items.filter(
+    (i) => i.safetyLevel === 'Critical' || i.safetyLevel === 'Low' || i.safetyLevel === 'Out of Stock'
+  ).length;
+  const recentDeliveriesCount = purchaseOrders.filter(
+    (p) => p.status === 'Received'
+  ).length;
+  const pendingOrdersCount = purchaseOrders.filter(
+    (p) => p.status === 'Ordered' || p.status === 'In Transit' || p.status === 'Delayed'
+  ).length;
 
-  const supplierNames = suppliers.map(s => s.name);
+  const supplierNames = suppliers.map((s) => s.name);
 
   return (
-    <div id="inventory-module-root" className="min-h-screen bg-[#f8fafc] text-slate-900 p-4 sm:p-6 lg:p-8 space-y-6">
-      
-      {/* Toast Notification Banner */}
-      {toastMessage && (
-        <div className="fixed top-5 right-5 z-50 animate-in fade-in slide-in-from-top-3 duration-200">
-          <div className="flex items-center gap-2.5 bg-slate-950 text-white text-xs font-semibold px-4 py-3 rounded-2xl shadow-xl border border-teal-800/50">
-            <CheckCircle2 className="w-4 h-4 text-teal-400 shrink-0" />
-            <span>{toastMessage.text}</span>
-          </div>
-        </div>
-      )}
-
-      {/* 1. Header Component */}
+    <div
+      id="inventory-module-root"
+      className="min-h-screen bg-[#f8fafc] text-slate-900 space-y-6 overflow-x-hidden"
+    >
       <InventoryHeader
         searchQuery={globalSearch}
         onSearchChange={setGlobalSearch}
@@ -362,13 +465,11 @@ export default function InventoryView() {
         alertCount={criticalItemsCount}
       />
 
-      {/* 2. Low-Stock Alert Bar matching reference */}
       <LowStockAlertBanner
         criticalCount={criticalItemsCount}
         onViewAlerts={() => setIsAlertsDrawerOpen(true)}
       />
 
-      {/* 3. KPI Cards Grid matching reference (Total Items, Low Stock, Recent Deliveries, Pending Orders) */}
       <InventoryKpiGrid
         totalItemsCount={totalItemsCount}
         lowStockCount={criticalItemsCount}
@@ -379,104 +480,102 @@ export default function InventoryView() {
         onViewPendingOrders={() => setIsPurchaseOrdersOpen(true)}
       />
 
-      {/* 4. Main Content Area matching reference: Left 8 Cols (Current Inventory Table) + Right 4 Cols (Recent Purchases + Insight) */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        
-        {/* Left 8 Cols: Current Inventory Table */}
-        <div className="lg:col-span-8">
+        <div className="lg:col-span-8 min-w-0">
           <CurrentInventoryTable
-            items={items}
+            items={filteredItems}
             selectedCategory={selectedCategory}
             onSelectCategory={setSelectedCategory}
             onSelectItem={(item) => setSelectedItemForDetail(item)}
             onLogMovement={(item) => handleOpenMovement(item)}
-            onQuickRestock={(item) => handleQuickRestock(item)}
+            onQuickRestock={(item) => void handleQuickRestock(item)}
             onEditItem={(item) => setSelectedItemForDetail(item)}
-            onDeleteItem={(id) => handleDeleteItem(id)}
-            onExportCSV={() => showToast('Inventory CSV exported successfully.')}
+            onDeleteItem={(id) => void handleDeleteItem(id)}
+            onExportCSV={handleExportCSV}
           />
         </div>
 
-        {/* Right 4 Cols: Recent Purchases Panel + Inventory Insight Card matching reference */}
-        <div className="lg:col-span-4 space-y-6">
+        <div className="lg:col-span-4 space-y-6 min-w-0">
           <RecentPurchasesPanel
             purchaseOrders={purchaseOrders}
             onSeeAll={() => setIsPurchaseOrdersOpen(true)}
-            onSelectPO={(po) => setIsPurchaseOrdersOpen(true)}
+            onSelectPO={() => setIsPurchaseOrdersOpen(true)}
             onNewPO={() => setIsLogPurchaseOpen(true)}
           />
 
-          <InventoryInsightCard
-            insight={aiInsights[0]}
-            onApplyRecommendation={(insight) => {
-              const targetItem = items.find(i => i.id === insight.targetItemId) || items[0];
-              handleQuickRestock(targetItem, insight.suggestedQty);
-            }}
-            onViewAllInsights={() => setIsAICopilotOpen(true)}
-          />
+          {aiInsights[0] && (
+            <InventoryInsightCard
+              insight={aiInsights[0]}
+              onApplyRecommendation={(insight) => {
+                const targetItem =
+                  items.find((i) => i.id === insight.targetItemId) || items[0];
+                if (targetItem) {
+                  void handleQuickRestock(targetItem, insight.suggestedQty);
+                }
+              }}
+              onViewAllInsights={() => setIsAICopilotOpen(true)}
+            />
+          )}
         </div>
-
       </div>
 
-      {/* 5. AI Demand Forecasting Section (Section 14 & 15) */}
       <AIDemandForecastingSection
         items={items}
         onGeneratePOFromForecast={(item, recQty) => {
-          handleQuickRestock(item, recQty);
+          void handleQuickRestock(item, recQty);
         }}
       />
 
-      {/* 6. Automatic Restocking Pipeline Section (Section 16) */}
       <AutoRestockPipelineSection
         onTriggerPipelineAudit={() => {
-          showToast('Pipeline diagnostics verified. Automatic safety stock triggers are live and healthy.');
+          triggerToast(
+            `${criticalItemsCount} low/critical SKUs currently flagged below minimum par levels.`
+          );
         }}
       />
 
-      {/* MODALS & DRAWERS */}
-
-      {/* Item Details Drawer */}
       {selectedItemForDetail && (
         <InventoryItemDetailDrawer
           item={selectedItemForDetail}
           onClose={() => setSelectedItemForDetail(null)}
           onLogMovement={(item) => handleOpenMovement(item)}
-          onQuickRestock={(item) => handleQuickRestock(item)}
-          onEditItem={(item) => showToast(`Edit mode for ${item.name}`)}
-          onPrintQR={(item) => showToast(`QR Barcode printed for ${item.sku}`)}
+          onQuickRestock={(item) => void handleQuickRestock(item)}
+          onEditItem={(item) => triggerToast(`Viewing stock ledger for ${item.name}`)}
+          onPrintQR={(item) => {
+            window.print();
+            triggerToast(`Print view opened for SKU ${item.sku}`);
+          }}
         />
       )}
 
-      {/* Log Stock Movement Modal */}
       {isMovementModalOpen && (
         <StockMovementModal
           item={itemForMovement}
           items={items}
           onClose={() => setIsMovementModalOpen(false)}
-          onSubmitMovement={handleApplyMovement}
+          onSubmitMovement={(id, delta, type, usr, ref, notes) =>
+            void handleApplyMovement(id, delta, type, usr, ref, notes)
+          }
         />
       )}
 
-      {/* Add New Item Modal */}
       {isAddItemOpen && (
         <AddNewItemModal
           onClose={() => setIsAddItemOpen(false)}
-          onAddItem={handleAddNewItem}
+          onAddItem={(data) => void handleAddNewItem(data)}
           existingSuppliers={supplierNames}
         />
       )}
 
-      {/* Log Purchase Modal */}
       {isLogPurchaseOpen && (
         <LogPurchaseModal
           items={items}
           existingSuppliers={supplierNames}
           onClose={() => setIsLogPurchaseOpen(false)}
-          onSubmitPO={handleSubmitPO}
+          onSubmitPO={(poData, autoRec) => void handleSubmitPO(poData, autoRec)}
         />
       )}
 
-      {/* Purchase Orders Modal */}
       {isPurchaseOrdersOpen && (
         <PurchaseOrdersModal
           purchaseOrders={purchaseOrders}
@@ -485,23 +584,21 @@ export default function InventoryView() {
             setIsPurchaseOrdersOpen(false);
             setIsLogPurchaseOpen(true);
           }}
-          onMarkAsReceived={handleMarkPOAsReceived}
+          onMarkAsReceived={(id) => void handleMarkPOAsReceived(id)}
         />
       )}
 
-      {/* Suppliers Modal */}
       {isSuppliersOpen && (
         <SuppliersModal
           suppliers={suppliers}
           onClose={() => setIsSuppliersOpen(false)}
-          onOpenNewPOForSupplier={(supName) => {
+          onOpenNewPOForSupplier={() => {
             setIsSuppliersOpen(false);
             setIsLogPurchaseOpen(true);
           }}
         />
       )}
 
-      {/* Valuation & Analytics Modal */}
       {isAnalyticsOpen && (
         <InventoryAnalyticsModal
           items={items}
@@ -513,36 +610,32 @@ export default function InventoryView() {
         />
       )}
 
-      {/* Physical Count Reconciliation Modal */}
       {isAuditOpen && (
         <InventoryAuditModal
           items={items}
           onClose={() => setIsAuditOpen(false)}
-          onApplyReconciliation={handleApplyReconciliation}
+          onApplyReconciliation={(updates) => void handleApplyReconciliation(updates)}
         />
       )}
 
-      {/* Low Stock Alerts Drawer */}
       {isAlertsDrawerOpen && (
         <LowStockAlertsDrawer
           items={items}
           onClose={() => setIsAlertsDrawerOpen(false)}
-          onQuickRestock={(item) => handleQuickRestock(item)}
-          onBulkRestockCritical={handleBulkRestockCritical}
+          onQuickRestock={(item) => void handleQuickRestock(item)}
+          onBulkRestockCritical={(list) => void handleBulkRestockCritical(list)}
         />
       )}
 
-      {/* AI Copilot Drawer */}
       {isAICopilotOpen && (
         <InventoryAICopilot
           items={items}
           onClose={() => setIsAICopilotOpen(false)}
-          onQuickRestock={(item) => handleQuickRestock(item)}
+          onQuickRestock={(item) => void handleQuickRestock(item)}
           onOpenAlerts={() => setIsAlertsDrawerOpen(true)}
           onOpenAnalytics={() => setIsAnalyticsOpen(true)}
         />
       )}
-
     </div>
   );
 }

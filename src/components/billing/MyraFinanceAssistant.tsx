@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Sparkles, MessageSquare, Send, X, Bot, TrendingUp, AlertCircle, CheckCircle2, ChevronRight } from 'lucide-react';
+import { Sparkles, Send, X, ChevronRight } from 'lucide-react';
 import { BillingInvoice, RevenueMonthlyMetric, UnbilledStayItem } from '../../types';
 
 interface MyraFinanceAssistantProps {
@@ -8,6 +8,7 @@ interface MyraFinanceAssistantProps {
   unbilledStays: UnbilledStayItem[];
   onCreateInvoiceClick: () => void;
   onOpenSettlements: () => void;
+  onFilterPending?: () => void;
   triggerToast: (msg: string) => void;
 }
 
@@ -18,34 +19,51 @@ interface ChatMessage {
   timestamp: string;
   suggestedAction?: {
     label: string;
-    actionType: 'create_invoice' | 'view_settlement' | 'send_reminders';
+    actionType: 'create_invoice' | 'view_settlement' | 'view_pending';
   };
 }
 
 export default function MyraFinanceAssistant({
   invoices,
-  revenueData,
   unbilledStays,
   onCreateInvoiceClick,
   onOpenSettlements,
-  triggerToast
+  onFilterPending,
 }: MyraFinanceAssistantProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [query, setQuery] = useState('');
+
+  const netCollected = invoices
+    .filter((i) => i.status !== 'Refunded')
+    .reduce((sum, i) => sum + i.paidAmount, 0);
+  const totalPending = invoices
+    .filter((i) => i.status !== 'Refunded')
+    .reduce((sum, i) => sum + i.dueAmount, 0);
+  const totalGst = invoices
+    .filter((i) => i.status !== 'Refunded')
+    .reduce((sum, i) => sum + i.gstAmount, 0);
+
+  const formatINR = (val: number) =>
+    `₹${new Intl.NumberFormat('en-IN').format(Math.round(val))}`;
+
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
       id: 'msg-1',
       sender: 'ai',
-      text: "Namaste Anand! I'm Myra, your ResortDesk Financial AI. Net revenue is tracking at ₹24.50 Lakhs (+12.4% MoM) with 14 active unbilled rooms. How can I assist with your accounts today?",
-      timestamp: 'Just now'
-    }
+      text: `Namaste! I'm Myra, your Mykonos Cottage Financial Assistant. Live collected revenue is ${formatINR(
+        netCollected
+      )} with ${unbilledStays.length} unbilled active stay${
+        unbilledStays.length === 1 ? '' : 's'
+      }. How can I assist with your accounts today?`,
+      timestamp: 'Now',
+    },
   ]);
 
   const quickPrompts = [
-    "What is our projected October revenue?",
-    "Summarize pending invoices & follow-ups",
-    "Calculate GST liability on F&B vs Rooms",
-    "Send WhatsApp payment links for overdue bills"
+    'Summarize collected vs pending revenue',
+    'Show pending invoices & follow-ups',
+    'Calculate GST liability on ledger',
+    'Review unbilled active rooms',
   ];
 
   const handleSend = (textToSend?: string) => {
@@ -56,43 +74,45 @@ export default function MyraFinanceAssistant({
       id: `msg-${Date.now()}`,
       sender: 'user',
       text,
-      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
     };
 
-    setMessages(prev => [...prev, userMsg]);
+    setMessages((prev) => [...prev, userMsg]);
     setQuery('');
 
-    // Generate intelligent AI response based on query keywords
     setTimeout(() => {
-      let reply = "I've analyzed your financial data.";
-      let suggestedAction: ChatMessage['suggestedAction'] = undefined;
+      let reply = `Collected ledger total is ${formatINR(netCollected)} across ${invoices.length} invoices.`;
+      let suggestedAction: ChatMessage['suggestedAction'];
 
       const lower = text.toLowerCase();
-      if (lower.includes('october') || lower.includes('projected') || lower.includes('revenue')) {
-        reply = "Based on 94% weekend villa occupancy and banquet bookings, projected October revenue is ₹28.2 Lakhs (+15.1% YoY). Average room realization rate is ₹16,400/night.";
-      } else if (lower.includes('pending') || lower.includes('unpaid') || lower.includes('overdue') || lower.includes('follow-up')) {
-        const pendingCount = invoices.filter(i => i.status === 'Pending' || i.status === 'Partial').length;
-        reply = `You have ${pendingCount} pending/partial invoices totaling ₹2,70,000. Largest pending folio is Vikram Malhotra (₹1,12,500) for Villa 108. Would you like me to dispatch automated WhatsApp payment links?`;
-        suggestedAction = {
-          label: 'Send WhatsApp Payment Links',
-          actionType: 'send_reminders'
-        };
-      } else if (lower.includes('gst') || lower.includes('tax') || lower.includes('gstr')) {
-        reply = "For current period, Total Output GST Liable is ₹4,41,000 (CGST: ₹2,20,500, SGST: ₹2,20,500). All room rates > ₹7,500 are accurately mapped under SAC 9963 @ 18%.";
-      } else if (lower.includes('unbilled') || lower.includes('stays') || lower.includes('rooms')) {
-        reply = `There are 14 in-house rooms with ₹1,94,200 in unbilled folios. 6 rooms are scheduled to check out today.`;
-        suggestedAction = {
-          label: 'Create Checkout Invoice',
-          actionType: 'create_invoice'
-        };
-      } else if (lower.includes('bank') || lower.includes('settlement') || lower.includes('payout')) {
-        reply = "Next automated Razorpay/PayU settlement of ₹18,40,000 is scheduled for deposit on Oct 28 into your HDFC Nodal Account.";
-        suggestedAction = {
-          label: 'View Settlement Schedule',
-          actionType: 'view_settlement'
-        };
-      } else {
-        reply = `I have logged your request regarding "${text}". Real-time ledger metrics and GST analytics have been updated across your ResortDesk dashboard.`;
+      if (lower.includes('pending') || lower.includes('unpaid') || lower.includes('follow-up')) {
+        const pendingInvs = invoices.filter(
+          (i) => i.status === 'Pending' || i.status === 'Partial'
+        );
+        const topInv = pendingInvs.sort((a, b) => b.dueAmount - a.dueAmount)[0];
+        reply =
+          pendingInvs.length > 0
+            ? `You have ${pendingInvs.length} pending/partial invoices totaling ${formatINR(
+                totalPending
+              )}. Largest balance is ${topInv.guestName} (${formatINR(topInv.dueAmount)}) for ${topInv.roomNumber}.`
+            : 'All issued GST invoices are currently settled with ₹0 pending balance.';
+        if (pendingInvs.length > 0) {
+          suggestedAction = { label: 'Filter Pending Invoices', actionType: 'view_pending' };
+        }
+      } else if (lower.includes('gst') || lower.includes('tax')) {
+        const halfGst = Math.round(totalGst / 2);
+        reply = `Current Output GST across active invoices is ${formatINR(
+          totalGst
+        )} (CGST: ${formatINR(halfGst)}, SGST: ${formatINR(totalGst - halfGst)} under SAC 9963).`;
+      } else if (lower.includes('unbilled') || lower.includes('rooms')) {
+        const unbilledVal = unbilledStays.reduce((s, u) => s + u.totalPending, 0);
+        reply = `There are ${unbilledStays.length} unbilled active stay${
+          unbilledStays.length === 1 ? '' : 's'
+        } totaling ${formatINR(unbilledVal)}.`;
+        suggestedAction = { label: 'Create Invoice', actionType: 'create_invoice' };
+      } else if (lower.includes('settlement') || lower.includes('bank')) {
+        reply = 'Review your configured nodal payout schedule and UTR reconciliation batches.';
+        suggestedAction = { label: 'View Settlement Schedule', actionType: 'view_settlement' };
       }
 
       const aiReply: ChatMessage = {
@@ -100,11 +120,10 @@ export default function MyraFinanceAssistant({
         sender: 'ai',
         text: reply,
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        suggestedAction
+        suggestedAction,
       };
-
-      setMessages(prev => [...prev, aiReply]);
-    }, 600);
+      setMessages((prev) => [...prev, aiReply]);
+    }, 250);
   };
 
   const handleActionClick = (action: ChatMessage['suggestedAction']) => {
@@ -115,14 +134,14 @@ export default function MyraFinanceAssistant({
     } else if (action.actionType === 'view_settlement') {
       onOpenSettlements();
       setIsOpen(false);
-    } else if (action.actionType === 'send_reminders') {
-      triggerToast('✓ Dispatched WhatsApp payment links to 2 pending guests.');
+    } else if (action.actionType === 'view_pending') {
+      onFilterPending?.();
+      setIsOpen(false);
     }
   };
 
   return (
     <>
-      {/* Floating Myra AI Trigger Button */}
       <div className="fixed bottom-6 right-6 z-40">
         <button
           id="btn-myra-finance-ai"
@@ -134,16 +153,12 @@ export default function MyraFinanceAssistant({
             <Sparkles className="w-5 h-5 text-emerald-300 animate-pulse" />
             <span className="absolute -top-1 -right-1 w-2 h-2 bg-emerald-400 rounded-full ring-2 ring-white" />
           </div>
-          <span className="hidden sm:inline font-bold text-xs tracking-tight">
-            Myra Finance AI
-          </span>
+          <span className="hidden sm:inline font-bold text-xs tracking-tight">Myra Finance AI</span>
         </button>
       </div>
 
-      {/* Floating Chat Modal */}
       {isOpen && (
         <div className="fixed bottom-20 right-4 sm:right-6 w-[94vw] sm:w-96 bg-white rounded-3xl shadow-2xl border border-slate-200 z-50 overflow-hidden flex flex-col h-[520px] animate-in slide-in-from-bottom-5 duration-200">
-          {/* Header */}
           <div className="bg-[#0c4033] text-white p-4 px-5 flex justify-between items-center shrink-0">
             <div className="flex items-center gap-2.5">
               <div className="w-8 h-8 rounded-full bg-emerald-500/20 border border-emerald-400/30 flex items-center justify-center">
@@ -154,7 +169,9 @@ export default function MyraFinanceAssistant({
                   Myra Financial Copilot
                   <span className="w-2 h-2 rounded-full bg-emerald-400 inline-block" />
                 </h4>
-                <p className="text-[10px] text-emerald-200/80">Real-Time GST &amp; Revenue Intelligence</p>
+                <p className="text-[10px] text-emerald-200/80">
+                  Live GST &amp; Ledger Intelligence
+                </p>
               </div>
             </div>
             <button
@@ -166,8 +183,7 @@ export default function MyraFinanceAssistant({
             </button>
           </div>
 
-          {/* Quick Prompts Bar */}
-          <div className="bg-slate-50 border-b border-slate-100 p-2.5 overflow-x-auto flex gap-1.5 scrollbar-none shrink-0">
+          <div className="bg-slate-50 border-b border-slate-100 p-2.5 overflow-x-auto flex gap-1.5 shrink-0">
             {quickPrompts.map((p, idx) => (
               <button
                 key={idx}
@@ -180,7 +196,6 @@ export default function MyraFinanceAssistant({
             ))}
           </div>
 
-          {/* Chat Messages Body */}
           <div className="flex-1 p-4 overflow-y-auto flex flex-col gap-3 text-xs">
             {messages.map((msg) => (
               <div
@@ -200,7 +215,7 @@ export default function MyraFinanceAssistant({
                     <button
                       type="button"
                       onClick={() => handleActionClick(msg.suggestedAction)}
-                      className="mt-2.5 w-full py-1.5 px-3 bg-white hover:bg-slate-50 text-[#0c4033] border border-teal-200 rounded-xl font-bold text-[11px] flex items-center justify-center gap-1.5 shadow-2xs transition-all cursor-pointer active:scale-98"
+                      className="mt-2.5 w-full py-1.5 px-3 bg-white hover:bg-slate-50 text-[#0c4033] border border-teal-200 rounded-xl font-bold text-[11px] flex items-center justify-center gap-1.5 shadow-2xs transition-all cursor-pointer"
                     >
                       <span>{msg.suggestedAction.label}</span>
                       <ChevronRight className="w-3.5 h-3.5" />
@@ -212,7 +227,6 @@ export default function MyraFinanceAssistant({
             ))}
           </div>
 
-          {/* Input Area */}
           <div className="p-3 border-t border-slate-100 bg-white shrink-0">
             <form
               onSubmit={(e) => {
@@ -223,7 +237,7 @@ export default function MyraFinanceAssistant({
             >
               <input
                 type="text"
-                placeholder="Ask Myra about revenue, GST, invoices..."
+                placeholder="Ask Myra about live revenue, GST, invoices..."
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2 text-xs text-slate-900 placeholder:text-slate-400 focus:bg-white focus:outline-none focus:border-teal-700 transition-all"

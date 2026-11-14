@@ -29,6 +29,7 @@ interface TodayOperationsSectionProps {
   vacantRoomsCount: number;
   unconfirmedBookingsCount: number;
   onNavigateModule: (tab: string, options?: OperationsNavigationOptions) => void;
+  isLiveFirestore?: boolean;
 }
 
 export default function TodayOperationsSection({
@@ -42,7 +43,8 @@ export default function TodayOperationsSection({
   unassignedRoomsCount,
   vacantRoomsCount,
   unconfirmedBookingsCount,
-  onNavigateModule
+  onNavigateModule,
+  isLiveFirestore = false
 }: TodayOperationsSectionProps) {
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('en-IN', {
@@ -167,8 +169,12 @@ export default function TodayOperationsSection({
           <div>
             <div className="flex items-center gap-2 flex-wrap">
               <h3 className="text-sm font-bold text-slate-900 tracking-tight">Today's Operations</h3>
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-100 text-slate-600 border border-slate-200">
-                Session Data
+              <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold border ${
+                isLiveFirestore
+                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                  : 'bg-amber-50 text-amber-800 border-amber-200'
+              }`}>
+                {isLiveFirestore ? 'Live Firestore Sync' : 'Auth / Sync Pending'}
               </span>
             </div>
             <p className="text-[11px] text-slate-400 font-medium">

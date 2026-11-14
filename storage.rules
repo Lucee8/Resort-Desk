@@ -1,0 +1,55 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    function isSignedIn() {
+      return request.auth != null && request.auth.uid != null;
+    }
+
+    function isAuthorizedStaff() {
+      return isSignedIn() && (
+        firestore.exists(/databases/(default)/documents/admins/$(request.auth.uid)) ||
+        (
+          firestore.exists(/databases/(default)/documents/staffProfiles/$(request.auth.uid)) &&
+          firestore.get(/databases/(default)/documents/staffProfiles/$(request.auth.uid)).data.disabled != true
+        )
+      );
+    }
+
+    // Guest ID documents (Aadhaar / Passport / Driving Licence PII)
+    match /guest-ids/{guestKey}/{fileName} {
+      allow read: if isAuthorizedStaff();
+      allow write: if isAuthorizedStaff()
+        && request.resource != null
+        && request.resource.size <= 5 * 1024 * 1024
+        && (
+          request.resource.contentType.matches('image/.*') ||
+          request.resource.contentType == 'application/pdf'
+        );
+    }
+
+    // Housekeeping completion verification photos
+    match /housekeeping-photos/{taskId}/{fileName} {
+      allow read: if isAuthorizedStaff();
+      allow write: if isAuthorizedStaff()
+        && request.resource != null
+        && request.resource.size <= 10 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*');
+    }
+
+    // Maintenance ticket photo evidence
+    match /maintenance-photos/{ticketId}/{fileName} {
+      allow read: if isAuthorizedStaff();
+      allow write: if isAuthorizedStaff()
+        && request.resource != null
+        && request.resource.size <= 10 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*');
+    }
+
+    // Deny all other Storage paths by default
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

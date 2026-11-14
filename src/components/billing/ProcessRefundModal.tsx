@@ -1,12 +1,16 @@
-import React, { useState } from 'react';
-import { X, RotateCcw, AlertTriangle, CheckCircle } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { X, RotateCcw, AlertTriangle, Loader2 } from 'lucide-react';
 import { BillingInvoice } from '../../types';
 
 interface ProcessRefundModalProps {
   isOpen: boolean;
   onClose: () => void;
   invoice: BillingInvoice | null;
-  onConfirmRefund: (invoiceId: string, refundAmount: number, reason: string) => void;
+  onConfirmRefund: (
+    invoiceId: string,
+    refundAmount: number,
+    reason: string
+  ) => Promise<void> | void;
   triggerToast: (msg: string) => void;
 }
 
@@ -15,19 +19,26 @@ export default function ProcessRefundModal({
   onClose,
   invoice,
   onConfirmRefund,
-  triggerToast
+  triggerToast,
 }: ProcessRefundModalProps) {
-  const [refundAmount, setRefundAmount] = useState<string>(invoice ? String(invoice.paidAmount) : '0');
-  const [reason, setReason] = useState('Guest requested cancellation due to travel schedule change.');
-  const [refundMode, setRefundMode] = useState('Original Payment Source (Instant Gateway Reversal)');
+  const [refundAmount, setRefundAmount] = useState<string>(
+    invoice ? String(invoice.paidAmount) : '0'
+  );
+  const [reason, setReason] = useState(
+    'Guest requested cancellation due to travel schedule change.'
+  );
+  const [refundMode, setRefundMode] = useState(
+    'Original Payment Source'
+  );
+  const [submitting, setSubmitting] = useState(false);
 
-  React.useEffect(() => {
+  useEffect(() => {
     if (invoice) {
       setRefundAmount(String(invoice.paidAmount));
     }
   }, [invoice]);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!invoice) return;
 
@@ -37,14 +48,21 @@ export default function ProcessRefundModal({
       return;
     }
 
-    onConfirmRefund(invoice.id, amt, reason);
-    triggerToast(`Credit Note generated. ₹${new Intl.NumberFormat('en-IN').format(amt)} refunded for ${invoice.invoiceNumber}`);
-    onClose();
+    setSubmitting(true);
+    try {
+      await onConfirmRefund(invoice.id, amt, reason);
+      triggerToast(
+        `Credit Note saved. ₹${new Intl.NumberFormat('en-IN').format(amt)} refunded for ${invoice.invoiceNumber}`
+      );
+      onClose();
+    } catch (err: any) {
+      triggerToast(err?.message || 'Failed to process refund in Firestore.');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   if (!isOpen || !invoice) return null;
-
-  const formatINR = (val: number) => new Intl.NumberFormat('en-IN').format(val);
 
   return (
     <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center z-50 p-4 animate-in fade-in duration-150">
@@ -57,10 +75,12 @@ export default function ProcessRefundModal({
             </div>
             <div>
               <h3 className="font-bold text-sm">Process Refund &amp; Credit Note</h3>
-              <p className="text-[11px] text-rose-200/80">{invoice.invoiceNumber} • {invoice.guestName}</p>
+              <p className="text-[11px] text-rose-200/80">
+                {invoice.invoiceNumber} • {invoice.guestName}
+              </p>
             </div>
           </div>
-          <button 
+          <button
             type="button"
             onClick={onClose}
             className="text-white/80 hover:text-white transition-colors cursor-pointer"
@@ -76,7 +96,7 @@ export default function ProcessRefundModal({
             <div>
               <span className="font-bold block">Statutory GST Credit Note</span>
               <p className="text-[11px] text-rose-700 mt-0.5">
-                Refunds generate a formal Section 34 GST Credit Note. Output GST liability will adjust automatically in GSTR-1.
+                Refunds generate a formal Section 34 GST Credit Note and adjust output GST liability.
               </p>
             </div>
           </div>
@@ -86,7 +106,9 @@ export default function ProcessRefundModal({
               Refund Amount (₹) *
             </label>
             <div className="relative">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 font-bold text-slate-400">₹</span>
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 font-bold text-slate-400">
+                ₹
+              </span>
               <input
                 type="number"
                 min="1"
@@ -121,13 +143,18 @@ export default function ProcessRefundModal({
               onChange={(e) => setRefundMode(e.target.value)}
               className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:bg-white focus:outline-none"
             >
-              <option value="Original Payment Source">Original Payment Source (UPI / Card Reversal)</option>
-              <option value="Direct Bank Transfer (NEFT/RTGS)">Direct Bank Transfer (NEFT/RTGS)</option>
-              <option value="Resort Credit Voucher">ResortDesk Credit Voucher (Valid 1 Year)</option>
+              <option value="Original Payment Source">
+                Original Payment Source (UPI / Card Reversal)
+              </option>
+              <option value="Direct Bank Transfer (NEFT/RTGS)">
+                Direct Bank Transfer (NEFT/RTGS)
+              </option>
+              <option value="Resort Credit Voucher">
+                Mykonos Cottage Credit Voucher (Valid 1 Year)
+              </option>
             </select>
           </div>
 
-          {/* Footer */}
           <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
             <button
               type="button"
@@ -138,10 +165,20 @@ export default function ProcessRefundModal({
             </button>
             <button
               type="submit"
-              className="px-5 py-2.5 text-xs font-bold text-white bg-rose-700 hover:bg-rose-800 rounded-xl shadow-md shadow-rose-900/20 transition-all cursor-pointer active:scale-98 flex items-center gap-1.5"
+              disabled={submitting}
+              className="px-5 py-2.5 text-xs font-bold text-white bg-rose-700 hover:bg-rose-800 disabled:opacity-60 rounded-xl shadow-md shadow-rose-900/20 transition-all cursor-pointer active:scale-98 flex items-center gap-1.5"
             >
-              <RotateCcw className="w-3.5 h-3.5" />
-              <span>Authorize Refund</span>
+              {submitting ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  <span>Authorizing...</span>
+                </>
+              ) : (
+                <>
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  <span>Authorize Refund</span>
+                </>
+              )}
             </button>
           </div>
         </form>

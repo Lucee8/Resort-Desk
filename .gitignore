@@ -6,3 +6,8 @@ coverage/
 *.log
 .env*
 !.env.example
+functions/node_modules/
+functions/lib/
+.playwright-cli/
+test-results/
+

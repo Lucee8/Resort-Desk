@@ -5,9 +5,10 @@ import { OccupancyDay } from '../types';
 interface OccupancyChartProps {
   history: OccupancyDay[];
   totalRooms?: number;
+  isLiveFirestore?: boolean;
 }
 
-export default function OccupancyChart({ history, totalRooms = 35 }: OccupancyChartProps) {
+export default function OccupancyChart({ history, totalRooms = 7, isLiveFirestore = false }: OccupancyChartProps) {
   const [selectedRange, setSelectedRange] = useState<'all' | 'weekday' | 'weekend'>('all');
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
 
@@ -62,7 +63,7 @@ export default function OccupancyChart({ history, totalRooms = 35 }: OccupancyCh
             </span>
           </div>
           <p className="text-[11px] text-slate-400 font-medium mt-0.5">
-            Sample 7-day cottage utilization ({totalRooms} rooms)
+            {isLiveFirestore ? 'Live' : 'Derived'} 7-day cottage utilization ({totalRooms} rooms)
           </p>
         </div>
 

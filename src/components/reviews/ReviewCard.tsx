@@ -19,6 +19,7 @@ import {
   Phone
 } from 'lucide-react';
 import { ReviewItem, ReviewPlatform, ReviewAISuggestion } from '../../types';
+import { useAuth } from '../../context/AuthContext';
 
 interface ReviewCardProps {
   key?: React.Key;
@@ -40,6 +41,8 @@ export default function ReviewCard({
   onSendRecoveryOffer,
   triggerToast
 }: ReviewCardProps) {
+  const { user } = useAuth();
+  const managerName = user?.displayName || user?.email?.split('@')[0] || 'Mykonos Manager';
   const [isReplyExpanded, setIsReplyExpanded] = useState<boolean>(review.status === 'Replied' ? false : true);
   const [isEditingDraft, setIsEditingDraft] = useState<boolean>(false);
   const [replyDraft, setReplyDraft] = useState<string>(
@@ -99,11 +102,11 @@ export default function ReviewCard({
 
     setIsPublishing(true);
     setTimeout(() => {
-      onPublishReply(review.id, replyDraft, "Anand Sharma (General Manager)");
+      onPublishReply(review.id, replyDraft, `${managerName} (Resort Management)`);
       setIsPublishing(false);
       setIsEditingDraft(false);
-      triggerToast(`Official reply published to ${review.platform}!`);
-    }, 600);
+      triggerToast(`Official reply saved for ${review.platform}!`);
+    }, 250);
   };
 
   const handleToneChangeAndRegenerate = (tone: 'Warm & Hospitable' | 'Empathetic Problem Solver' | 'Executive & Crisp' | 'Luxury Concierge') => {
@@ -359,7 +362,7 @@ export default function ReviewCard({
                 />
                 <div className="flex items-center justify-between text-[11px] text-slate-400">
                   <span>{replyDraft.length} characters</span>
-                  <span>Will be published as <strong>Anand Sharma (GM)</strong></span>
+                  <span>Will be published as <strong>{managerName}</strong></span>
                 </div>
               </div>
             ) : (

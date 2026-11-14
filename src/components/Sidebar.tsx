@@ -1,23 +1,25 @@
 import React from 'react';
-import { 
-  LayoutDashboard, 
-  CalendarRange, 
-  Users, 
-  Brush, 
-  Receipt, 
-  LifeBuoy, 
+import {
+  LayoutDashboard,
+  CalendarRange,
+  Users,
+  Brush,
+  Receipt,
+  LifeBuoy,
   LogOut,
-  Sliders, 
-  Wrench, 
-  BarChart3, 
-  Boxes, 
-  UserCheck, 
-  Star, 
-  MessageSquare, 
+  LogIn,
+  Sliders,
+  Wrench,
+  BarChart3,
+  Boxes,
+  UserCheck,
+  Star,
+  MessageSquare,
   Settings,
   X,
-  MapPin
+  MapPin,
 } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
 
 interface SidebarProps {
   activeTab: string;
@@ -28,35 +30,68 @@ interface SidebarProps {
   inventoryAlertCount?: number;
   staffAlertCount?: number;
   reviewsAlertCount?: number;
+  whatsappCount?: number;
   isMobileOpen?: boolean;
   onCloseMobile?: () => void;
 }
 
-export default function Sidebar({ 
-  activeTab, 
-  setActiveTab, 
+export default function Sidebar({
+  activeTab,
+  setActiveTab,
   branding,
   housekeepingCount,
-  maintenanceCount = 18,
-  inventoryAlertCount = 3,
-  staffAlertCount = 3,
-  reviewsAlertCount = 2,
+  maintenanceCount = 0,
+  inventoryAlertCount = 0,
+  staffAlertCount = 0,
+  reviewsAlertCount = 0,
+  whatsappCount = 0,
   isMobileOpen = false,
-  onCloseMobile
+  onCloseMobile,
 }: SidebarProps) {
-  
+  const { user, signOut, openAuthModal } = useAuth();
+
   const menuItems = [
     { id: 'dashboard', name: 'Home', icon: LayoutDashboard },
     { id: 'bookings', name: 'Bookings', icon: CalendarRange },
-    { id: 'whatsapp', name: 'WhatsApp', icon: MessageSquare, badge: 8 },
-    { id: 'reviews', name: 'Reviews', icon: Star, badge: reviewsAlertCount > 0 ? reviewsAlertCount : undefined },
+    {
+      id: 'whatsapp',
+      name: 'WhatsApp',
+      icon: MessageSquare,
+      badge: whatsappCount > 0 ? whatsappCount : undefined,
+    },
+    {
+      id: 'reviews',
+      name: 'Reviews',
+      icon: Star,
+      badge: reviewsAlertCount > 0 ? reviewsAlertCount : undefined,
+    },
     { id: 'reports', name: 'Analytics', icon: BarChart3 },
     { id: 'guests', name: 'Guests', icon: Users },
     { id: 'rooms', name: 'Room Management', icon: Sliders },
-    { id: 'housekeeping', name: 'Housekeeping', icon: Brush, badge: housekeepingCount > 0 ? housekeepingCount : undefined },
-    { id: 'maintenance', name: 'Maintenance', icon: Wrench, badge: maintenanceCount > 0 ? maintenanceCount : undefined },
-    { id: 'inventory', name: 'Inventory', icon: Boxes, badge: inventoryAlertCount > 0 ? inventoryAlertCount : undefined },
-    { id: 'staff', name: 'Staff', icon: UserCheck, badge: staffAlertCount > 0 ? staffAlertCount : undefined },
+    {
+      id: 'housekeeping',
+      name: 'Housekeeping',
+      icon: Brush,
+      badge: housekeepingCount > 0 ? housekeepingCount : undefined,
+    },
+    {
+      id: 'maintenance',
+      name: 'Maintenance',
+      icon: Wrench,
+      badge: maintenanceCount > 0 ? maintenanceCount : undefined,
+    },
+    {
+      id: 'inventory',
+      name: 'Inventory',
+      icon: Boxes,
+      badge: inventoryAlertCount > 0 ? inventoryAlertCount : undefined,
+    },
+    {
+      id: 'staff',
+      name: 'Staff',
+      icon: UserCheck,
+      badge: staffAlertCount > 0 ? staffAlertCount : undefined,
+    },
     { id: 'billing', name: 'Billing', icon: Receipt },
     { id: 'settings', name: 'Settings', icon: Settings },
   ];
@@ -73,7 +108,7 @@ export default function Sidebar({
       <div className="flex flex-col gap-5">
         {/* Brand Header */}
         <div className="px-2 flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
+          <div className="flex items-center gap-2.5 min-w-0">
             <div className="w-9 h-9 rounded-xl bg-teal-800 flex items-center justify-center text-white font-serif font-bold text-lg shadow-sm shadow-teal-900/20 shrink-0">
               M
             </div>
@@ -82,13 +117,12 @@ export default function Sidebar({
                 {branding || 'Mykonos Cottage'}
               </h1>
               <p className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider flex items-center gap-1 mt-0.5">
-                <MapPin className="w-2.5 h-2.5 text-amber-600" />
-                <span>Tarkarli, Malvan</span>
+                <MapPin className="w-2.5 h-2.5 text-amber-600 shrink-0" />
+                <span className="truncate">Tarkarli, Malvan</span>
               </p>
             </div>
           </div>
 
-          {/* Close button on mobile view */}
           {onCloseMobile && (
             <button
               type="button"
@@ -110,29 +144,34 @@ export default function Sidebar({
               <button
                 id={`sidebar-item-${item.id}`}
                 key={item.id}
+                type="button"
                 onClick={() => handleSelectTab(item.id)}
                 className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-semibold transition-all duration-150 group cursor-pointer ${
-                  isActive 
+                  isActive
                     ? item.id === 'maintenance'
                       ? 'bg-[#a64b2a] text-white shadow-md shadow-[#a64b2a]/20'
-                      : 'bg-teal-800 text-white shadow-md shadow-teal-900/10' 
+                      : 'bg-teal-800 text-white shadow-md shadow-teal-900/10'
                     : 'text-slate-600 hover:bg-slate-150/80 hover:text-slate-900'
                 }`}
               >
-                <div className="flex items-center gap-3">
-                  <Icon className={`w-[18px] h-[18px] transition-transform duration-200 group-hover:scale-105 ${
-                    isActive ? 'text-white' : 'text-slate-400 group-hover:text-slate-600'
-                  }`} />
-                  <span>{item.name}</span>
+                <div className="flex items-center gap-3 min-w-0">
+                  <Icon
+                    className={`w-[18px] h-[18px] shrink-0 transition-transform duration-200 group-hover:scale-105 ${
+                      isActive ? 'text-white' : 'text-slate-400 group-hover:text-slate-600'
+                    }`}
+                  />
+                  <span className="truncate">{item.name}</span>
                 </div>
                 {item.badge !== undefined && (
-                  <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${
-                    isActive 
-                      ? 'bg-white/20 text-white' 
-                      : item.id === 'maintenance'
+                  <span
+                    className={`text-[10px] px-2 py-0.5 rounded-full font-bold shrink-0 ${
+                      isActive
+                        ? 'bg-white/20 text-white'
+                        : item.id === 'maintenance'
                         ? 'bg-orange-50 text-[#a64b2a] border border-orange-200'
                         : 'bg-rose-50 text-rose-600 border border-rose-100'
-                  }`}>
+                    }`}
+                  >
                     {item.badge}
                   </span>
                 )}
@@ -153,35 +192,51 @@ export default function Sidebar({
           <LifeBuoy className="w-4 h-4 text-slate-400" />
           <span>Support &amp; Settings</span>
         </button>
-        <button
-          id="sidebar-signout-btn"
-          type="button"
-          onClick={() => window.location.reload()}
-          className="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-semibold text-slate-500 hover:bg-rose-50 hover:text-rose-600 transition-all duration-150 cursor-pointer"
-        >
-          <LogOut className="w-4 h-4 text-slate-400" />
-          <span>Reset Session</span>
-        </button>
+
+        {user ? (
+          <button
+            id="sidebar-signout-btn"
+            type="button"
+            onClick={() => {
+              void signOut();
+            }}
+            className="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-semibold text-slate-500 hover:bg-rose-50 hover:text-rose-600 transition-all duration-150 cursor-pointer"
+          >
+            <LogOut className="w-4 h-4 text-slate-400 shrink-0" />
+            <span className="truncate">
+              Sign Out ({user.displayName || user.email?.split('@')[0] || 'Staff'})
+            </span>
+          </button>
+        ) : (
+          <button
+            id="sidebar-signin-btn"
+            type="button"
+            onClick={() => {
+              if (onCloseMobile) onCloseMobile();
+              openAuthModal();
+            }}
+            className="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-semibold text-teal-800 bg-teal-50 hover:bg-teal-100 transition-all duration-150 cursor-pointer"
+          >
+            <LogIn className="w-4 h-4 text-teal-700 shrink-0" />
+            <span>Staff Sign In</span>
+          </button>
+        )}
       </div>
     </div>
   );
 
   return (
     <>
-      {/* 1. Desktop Static Sidebar (visible on lg and above) */}
       <aside id="resort-sidebar-desktop" className="hidden lg:block h-screen shrink-0">
         {sidebarContent}
       </aside>
 
-      {/* 2. Mobile Drawer Sidebar (visible on mobile / tablet when opened) */}
       {isMobileOpen && (
         <div id="resort-sidebar-mobile-drawer" className="lg:hidden fixed inset-0 z-50 flex">
-          {/* Backdrop overlay */}
-          <div 
+          <div
             onClick={onCloseMobile}
             className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-200"
           />
-          {/* Drawer content */}
           <div className="relative z-10 animate-in slide-in-from-left duration-250 shadow-2xl h-full">
             {sidebarContent}
           </div>

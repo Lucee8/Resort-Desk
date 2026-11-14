@@ -20,8 +20,14 @@ import {
   BookingPaymentEntry,
   BookingPaymentMethod,
   GuestCRM,
+  HousekeepingTask,
   RoomUnit,
 } from '../types';
+import {
+  OperationType,
+  handleFirestoreError,
+  stripUndefined,
+} from './firestoreBase';
 import {
   addDaysISO,
   diffNights,
@@ -717,76 +723,95 @@ export function buildSampleMykonosBookings(): Booking[] {
 }
 
 export async function seedMykonosStarterDataset(): Promise<void> {
-  const batch = writeBatch(db);
-  for (const room of MYKONOS_ROOM_UNITS) {
-    batch.set(doc(db, 'rooms', room.id), room, { merge: true });
-  }
-  const sampleBookings = buildSampleMykonosBookings();
-  for (const booking of sampleBookings) {
-    batch.set(doc(db, 'bookings', booking.id), booking, { merge: true });
-    if (booking.guestId) {
-      const guestDoc: GuestCRM = {
-        id: booking.guestId,
-        name: booking.guestName,
-        phone: booking.guestPhone,
-        email: booking.guestEmail,
-        location: booking.guestCity || 'Maharashtra, India',
-        avatar:
-          booking.avatarUrl ||
-          'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=150&q=80',
-        isVIP: booking.membership.toLowerCase().includes('repeat') || booking.membership.toLowerCase().includes('platinum'),
-        birthday: '',
-        anniversary: booking.occasionTag === 'Anniversary' ? 'Oct 28' : '',
-        preferences: booking.preferences,
-        generalNotes: booking.conciergeRequest || booking.notes[0] || '',
-        visitHistory: [
-          {
-            id: `vh-${booking.id}`,
-            roomName: `${booking.roomNumber} (${booking.roomCategory})`,
-            dateRange: `${booking.startDate} - ${booking.endDate}`,
-            nightsCount: booking.nights,
-            status: booking.bookingStatus === 'Checked-in' ? 'Active' : 'Upcoming',
-          },
-        ],
-        feedback: [],
-        payments: (booking.payments || []).map((p) => ({
-          id: p.id,
-          invoiceId: booking.invoice.invoiceNumber,
-          date: p.recordedAt,
-          amount: p.amount,
-          status: p.method.includes('Cash')
-            ? 'Paid via Cash'
-            : p.method.includes('Card')
-              ? 'Paid via Card'
-              : 'Paid via UPI',
-        })),
-      };
-      batch.set(doc(db, 'guests', booking.guestId), guestDoc, { merge: true });
+  try {
+    const batch = writeBatch(db);
+    for (const room of MYKONOS_ROOM_UNITS) {
+      batch.set(doc(db, 'rooms', room.id), stripUndefined(room), { merge: true });
     }
-    batch.set(
-      doc(db, 'invoices', booking.invoice.invoiceNumber.replace(/[^\w-]/g, '_')),
-      {
-        id: booking.invoice.invoiceNumber.replace(/[^\w-]/g, '_'),
-        invoiceNumber: booking.invoice.invoiceNumber,
-        bookingId: booking.id,
-        guestName: booking.guestName,
-        guestPhone: booking.guestPhone,
-        guestEmail: booking.guestEmail,
-        roomNumber: booking.roomNumber,
-        issueDate: booking.invoice.date,
-        subtotal: booking.invoice.subtotal,
-        cgstAmount: booking.invoice.cgst,
-        sgstAmount: booking.invoice.sgst,
-        gstAmount: booking.invoice.cgst + booking.invoice.sgst,
-        totalAmount: booking.amount,
-        paidAmount: booking.advancePaid || 0,
-        dueAmount: booking.balanceDue ?? booking.amount,
-        status: booking.paymentStatus === 'Paid' ? 'Paid' : booking.paymentStatus === 'Partial' ? 'Partial' : 'Pending',
-      },
-      { merge: true }
-    );
+    const sampleBookings = buildSampleMykonosBookings();
+    for (const booking of sampleBookings) {
+      batch.set(doc(db, 'bookings', booking.id), stripUndefined(booking), { merge: true });
+      if (booking.guestId) {
+        const guestDoc: GuestCRM = {
+          id: booking.guestId,
+          name: booking.guestName,
+          phone: booking.guestPhone,
+          email: booking.guestEmail,
+          location: booking.guestCity || 'Maharashtra, India',
+          avatar:
+            booking.avatarUrl ||
+            'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=150&q=80',
+          isVIP: booking.membership.toLowerCase().includes('repeat') || booking.membership.toLowerCase().includes('platinum'),
+          birthday: '',
+          anniversary: booking.occasionTag === 'Anniversary' ? 'Oct 28' : '',
+          preferences: booking.preferences,
+          generalNotes: booking.conciergeRequest || booking.notes[0] || '',
+          visitHistory: [
+            {
+              id: `vh-${booking.id}`,
+              roomName: `${booking.roomNumber} (${booking.roomCategory})`,
+              dateRange: `${booking.startDate} - ${booking.endDate}`,
+              nightsCount: booking.nights,
+              status: booking.bookingStatus === 'Checked-in' ? 'Active' : 'Upcoming',
+            },
+          ],
+          feedback: [],
+          payments: (booking.payments || []).map((p) => ({
+            id: p.id,
+            invoiceId: booking.invoice.invoiceNumber,
+            date: p.recordedAt,
+            amount: p.amount,
+            status: p.method.includes('Cash')
+              ? 'Paid via Cash'
+              : p.method.includes('Card')
+                ? 'Paid via Card'
+                : 'Paid via UPI',
+          })),
+        };
+        batch.set(doc(db, 'guests', booking.guestId), stripUndefined(guestDoc), { merge: true });
+      }
+      const invoiceDocId = booking.invoice.invoiceNumber.replace(/[^\w-]/g, '_');
+      batch.set(
+        doc(db, 'invoices', invoiceDocId),
+        stripUndefined({
+          id: invoiceDocId,
+          invoiceNumber: booking.invoice.invoiceNumber,
+          bookingId: booking.id,
+          guestId: booking.guestId,
+          guestName: booking.guestName,
+          guestPhone: booking.guestPhone,
+          guestEmail: booking.guestEmail,
+          roomNumber: booking.roomNumber,
+          issueDate: booking.invoice.date,
+          dueDate: booking.invoice.date,
+          items: booking.invoice.items.map((it, idx) => ({
+            id: `it-${booking.id}-${idx + 1}`,
+            description: it.description,
+            sacCode: it.sacCode || booking.sacCode || '996311',
+            qty: it.qty,
+            unitPrice: it.price,
+            gstRate: it.gstRate ?? booking.gstRateApplied ?? 12,
+            amount: it.amount,
+            gstAmount: Math.round((it.amount * (it.gstRate ?? booking.gstRateApplied ?? 12)) / 100),
+          })),
+          subtotal: booking.invoice.subtotal,
+          cgstAmount: booking.invoice.cgst,
+          sgstAmount: booking.invoice.sgst,
+          igstAmount: booking.invoice.igst || 0,
+          gstAmount: booking.invoice.cgst + booking.invoice.sgst + (booking.invoice.igst || 0),
+          discount: booking.discount || 0,
+          totalAmount: booking.amount,
+          paidAmount: booking.advancePaid || 0,
+          dueAmount: booking.balanceDue ?? booking.amount,
+          status: booking.paymentStatus === 'Paid' ? 'Paid' : booking.paymentStatus === 'Partial' ? 'Partial' : 'Pending',
+        }),
+        { merge: true }
+      );
+    }
+    await batch.commit();
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, 'bookings/rooms/guests/invoices');
   }
-  await batch.commit();
 }
 
 export async function createReservationAtomic(
@@ -805,7 +830,7 @@ export async function createReservationAtomic(
   );
   const candidateDocRefs = roomBookingsSnap.docs.map((d) => doc(db, 'bookings', d.id));
 
-  // Look up existing guest by phone to avoid duplicates
+  // Look up existing guest by phone/email to avoid duplicates
   const normalizedPhone = newBooking.guestPhone.replace(/\s+/g, '');
   const guestsSnap = await getDocs(collection(db, 'guests'));
   const existingGuestDoc = guestsSnap.docs.find((g) => {
@@ -818,7 +843,7 @@ export async function createReservationAtomic(
   });
 
   const guestId = existingGuestDoc?.id || newBooking.guestId || `guest-${Date.now()}`;
-  const finalBooking: Booking = {
+  const finalBooking: Booking = stripUndefined({
     ...newBooking,
     guestId,
     roomId: room.id,
@@ -828,7 +853,7 @@ export async function createReservationAtomic(
     nights,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
-  };
+  });
 
   await runTransaction(db, async (tx) => {
     const roomSnap = await tx.get(doc(db, 'rooms', room.id));
@@ -847,6 +872,17 @@ export async function createReservationAtomic(
         continue;
       }
       const { checkInISO: bStart, checkOutISO: bEnd } = resolveBookingDatesISO(existing);
+      const existingPhone = existing.guestPhone?.replace(/\s+/g, '');
+      if (
+        normalizedPhone.length >= 8 &&
+        existingPhone === normalizedPhone &&
+        bStart === checkInISO &&
+        bEnd === checkOutISO
+      ) {
+        throw new Error(
+          `Duplicate reservation prevented: ${existing.guestName} already has ${existing.bookingCode || existing.id} for these exact dates.`
+        );
+      }
       if (hasDateOverlap(checkInISO, checkOutISO, bStart, bEnd)) {
         throw new Error(
           `Date conflict: ${room.roomName} is already reserved for ${existing.guestName} (${bStart} to ${bEnd}).`
@@ -870,13 +906,13 @@ export async function createReservationAtomic(
         },
         ...(prevGuest.visitHistory || []),
       ];
-      tx.update(doc(db, 'guests', guestId), {
+      tx.update(doc(db, 'guests', guestId), stripUndefined({
         name: finalBooking.guestName,
         phone: finalBooking.guestPhone,
         email: finalBooking.guestEmail || prevGuest.email,
         location: finalBooking.guestCity || prevGuest.location,
         visitHistory: updatedVisits,
-      });
+      }));
     } else {
       const freshGuest: GuestCRM = {
         id: guestId,
@@ -903,12 +939,12 @@ export async function createReservationAtomic(
         feedback: [],
         payments: [],
       };
-      tx.set(doc(db, 'guests', guestId), freshGuest);
+      tx.set(doc(db, 'guests', guestId), stripUndefined(freshGuest));
     }
 
     // Write invoice doc
     const invoiceDocId = finalBooking.invoice.invoiceNumber.replace(/[^\w-]/g, '_');
-    tx.set(doc(db, 'invoices', invoiceDocId), {
+    tx.set(doc(db, 'invoices', invoiceDocId), stripUndefined({
       id: invoiceDocId,
       invoiceNumber: finalBooking.invoice.invoiceNumber,
       bookingId: finalBooking.id,
@@ -918,12 +954,23 @@ export async function createReservationAtomic(
       guestEmail: finalBooking.guestEmail,
       roomNumber: finalBooking.roomNumber,
       issueDate: finalBooking.invoice.date,
-      items: finalBooking.invoice.items,
+      dueDate: finalBooking.invoice.date,
+      items: finalBooking.invoice.items.map((it, idx) => ({
+        id: `it-${finalBooking.id}-${idx + 1}`,
+        description: it.description,
+        sacCode: it.sacCode || finalBooking.sacCode || '996311',
+        qty: it.qty,
+        unitPrice: it.price,
+        gstRate: it.gstRate ?? finalBooking.gstRateApplied ?? 12,
+        amount: it.amount,
+        gstAmount: Math.round((it.amount * (it.gstRate ?? finalBooking.gstRateApplied ?? 12)) / 100),
+      })),
       subtotal: finalBooking.invoice.subtotal,
       cgstAmount: finalBooking.invoice.cgst,
       sgstAmount: finalBooking.invoice.sgst,
       igstAmount: finalBooking.invoice.igst || 0,
       gstAmount: finalBooking.invoice.cgst + finalBooking.invoice.sgst + (finalBooking.invoice.igst || 0),
+      discount: finalBooking.discount || 0,
       totalAmount: finalBooking.amount,
       paidAmount: finalBooking.advancePaid || 0,
       dueAmount: finalBooking.balanceDue ?? finalBooking.amount,
@@ -933,17 +980,17 @@ export async function createReservationAtomic(
           : finalBooking.paymentStatus === 'Partial'
             ? 'Partial'
             : 'Pending',
-    });
+    }));
 
     // Write payment doc if verified advance > 0
     if (finalBooking.payments && finalBooking.payments.length > 0) {
       for (const pay of finalBooking.payments) {
-        tx.set(doc(db, 'payments', pay.id), {
+        tx.set(doc(db, 'payments', pay.id), stripUndefined({
           ...pay,
           bookingId: finalBooking.id,
           guestName: finalBooking.guestName,
           folioNumber: finalBooking.folioNumber || finalBooking.invoice.invoiceNumber,
-        });
+        }));
       }
     }
   });
@@ -951,36 +998,173 @@ export async function createReservationAtomic(
   return finalBooking;
 }
 
-export async function checkInBookingInFirestore(booking: Booking): Promise<void> {
-  const batch = writeBatch(db);
-  batch.update(doc(db, 'bookings', booking.id), {
-    bookingStatus: 'Checked-in',
+export async function editReservationAtomic(
+  updatedBooking: Booking,
+  room: RoomUnit
+): Promise<Booking> {
+  const { checkInISO, checkOutISO } = resolveBookingDatesISO(updatedBooking);
+  const nights = diffNights(checkInISO, checkOutISO);
+  if (nights <= 0) {
+    throw new Error('Check-out date must be at least 1 night after check-in date.');
+  }
+
+  const roomBookingsSnap = await getDocs(
+    query(collection(db, 'bookings'), where('roomId', '==', room.id))
+  );
+  const candidateRefs = roomBookingsSnap.docs.map((d) => doc(db, 'bookings', d.id));
+
+  const nextBooking: Booking = stripUndefined({
+    ...updatedBooking,
+    roomId: room.id,
+    roomNumber: room.roomName,
+    roomType: room.categoryName,
+    roomCategory: room.categoryName,
+    nights,
     updatedAt: new Date().toISOString(),
   });
-  if (booking.roomId) {
-    batch.set(
-      doc(db, 'rooms', booking.roomId),
-      { status: 'Occupied' },
+
+  await runTransaction(db, async (tx) => {
+    const roomSnap = await tx.get(doc(db, 'rooms', room.id));
+    if (roomSnap.exists() && (roomSnap.data() as RoomUnit).status === 'Maintenance') {
+      throw new Error(`${room.roomName} is currently under Maintenance.`);
+    }
+
+    for (const refDoc of candidateRefs) {
+      const snap = await tx.get(refDoc);
+      if (!snap.exists()) continue;
+      const existing = snap.data() as Booking;
+      if (existing.id === nextBooking.id) continue;
+      if (existing.bookingStatus === 'Cancelled' || existing.bookingStatus === 'Checked-out') {
+        continue;
+      }
+      const { checkInISO: bStart, checkOutISO: bEnd } = resolveBookingDatesISO(existing);
+      if (hasDateOverlap(checkInISO, checkOutISO, bStart, bEnd)) {
+        throw new Error(
+          `Date conflict: ${room.roomName} is already booked by ${existing.guestName} (${bStart} to ${bEnd}).`
+        );
+      }
+    }
+
+    tx.set(doc(db, 'bookings', nextBooking.id), nextBooking, { merge: true });
+
+    const invoiceDocId = nextBooking.invoice.invoiceNumber.replace(/[^\w-]/g, '_');
+    tx.set(
+      doc(db, 'invoices', invoiceDocId),
+      stripUndefined({
+        id: invoiceDocId,
+        invoiceNumber: nextBooking.invoice.invoiceNumber,
+        bookingId: nextBooking.id,
+        guestName: nextBooking.guestName,
+        guestPhone: nextBooking.guestPhone,
+        guestEmail: nextBooking.guestEmail,
+        roomNumber: nextBooking.roomNumber,
+        items: nextBooking.invoice.items.map((it, idx) => ({
+          id: `it-${nextBooking.id}-${idx + 1}`,
+          description: it.description,
+          sacCode: it.sacCode || nextBooking.sacCode || '996311',
+          qty: it.qty,
+          unitPrice: it.price,
+          gstRate: it.gstRate ?? nextBooking.gstRateApplied ?? 12,
+          amount: it.amount,
+          gstAmount: Math.round((it.amount * (it.gstRate ?? nextBooking.gstRateApplied ?? 12)) / 100),
+        })),
+        subtotal: nextBooking.invoice.subtotal,
+        cgstAmount: nextBooking.invoice.cgst,
+        sgstAmount: nextBooking.invoice.sgst,
+        igstAmount: nextBooking.invoice.igst || 0,
+        gstAmount:
+          nextBooking.invoice.cgst + nextBooking.invoice.sgst + (nextBooking.invoice.igst || 0),
+        discount: nextBooking.discount || 0,
+        totalAmount: nextBooking.amount,
+        paidAmount: nextBooking.advancePaid || 0,
+        dueAmount: nextBooking.balanceDue ?? Math.max(0, nextBooking.amount - (nextBooking.advancePaid || 0)),
+        status:
+          nextBooking.paymentStatus === 'Paid'
+            ? 'Paid'
+            : nextBooking.paymentStatus === 'Partial'
+              ? 'Partial'
+              : 'Pending',
+      }),
       { merge: true }
     );
+  });
+
+  return nextBooking;
+}
+
+export async function cancelBookingAtomic(booking: Booking): Promise<void> {
+  try {
+    const batch = writeBatch(db);
+    batch.update(doc(db, 'bookings', booking.id), {
+      bookingStatus: 'Cancelled',
+      updatedAt: new Date().toISOString(),
+    });
+    if (booking.roomId && booking.bookingStatus === 'Checked-in') {
+      batch.set(doc(db, 'rooms', booking.roomId), { status: 'Available' }, { merge: true });
+    }
+    await batch.commit();
+  } catch (error) {
+    handleFirestoreError(error, OperationType.UPDATE, `bookings/${booking.id}`);
   }
-  await batch.commit();
+}
+
+export async function checkInBookingInFirestore(booking: Booking): Promise<void> {
+  try {
+    const batch = writeBatch(db);
+    batch.update(doc(db, 'bookings', booking.id), {
+      bookingStatus: 'Checked-in',
+      updatedAt: new Date().toISOString(),
+    });
+    if (booking.roomId) {
+      batch.set(
+        doc(db, 'rooms', booking.roomId),
+        { status: 'Occupied' },
+        { merge: true }
+      );
+    }
+    await batch.commit();
+  } catch (error) {
+    handleFirestoreError(error, OperationType.UPDATE, `bookings/${booking.id}`);
+  }
 }
 
 export async function checkOutBookingInFirestore(booking: Booking): Promise<void> {
-  const batch = writeBatch(db);
-  batch.update(doc(db, 'bookings', booking.id), {
-    bookingStatus: 'Checked-out',
-    updatedAt: new Date().toISOString(),
-  });
-  if (booking.roomId) {
-    batch.set(
-      doc(db, 'rooms', booking.roomId),
-      { status: 'Deep Clean', maintenanceNote: 'Turnover clean after checkout' },
-      { merge: true }
-    );
+  try {
+    const batch = writeBatch(db);
+    batch.update(doc(db, 'bookings', booking.id), {
+      bookingStatus: 'Checked-out',
+      updatedAt: new Date().toISOString(),
+    });
+    if (booking.roomId) {
+      batch.set(
+        doc(db, 'rooms', booking.roomId),
+        { status: 'Deep Clean', maintenanceNote: 'Turnover clean after checkout' },
+        { merge: true }
+      );
+    }
+    // Automatically queue a Housekeeping turnover task upon checkout
+    const hkTask: HousekeepingTask = {
+      id: `hk-co-${booking.id}`,
+      roomNumber: booking.roomNumber,
+      type: booking.roomType || booking.roomCategory || 'Cottage',
+      status: 'Pending',
+      priority: 'High',
+      photoVerified: false,
+      completionTime: 'Not Started',
+      checklist: [
+        { id: 't1', name: 'Strip Bedding & Linen', checked: false },
+        { id: 't2', name: 'Sanitize Bathroom & Fixtures', checked: false },
+        { id: 't3', name: 'Replenish Minibar & Amenities', checked: false },
+        { id: 't4', name: 'Dusting & Surface Polish', checked: false },
+        { id: 't5', name: 'Floor Vacuuming & Mopping', checked: false },
+        { id: 't6', name: 'Quality Photo Verification', checked: false },
+      ],
+    };
+    batch.set(doc(db, 'housekeepingTasks', hkTask.id), stripUndefined(hkTask), { merge: true });
+    await batch.commit();
+  } catch (error) {
+    handleFirestoreError(error, OperationType.UPDATE, `bookings/${booking.id}`);
   }
-  await batch.commit();
 }
 
 export async function moveBookingRoomAtomic(
@@ -1066,7 +1250,25 @@ export async function recordBookingPaymentAtomic(
     const snap = await tx.get(bRef);
     const current = (snap.exists() ? snap.data() : booking) as Booking;
 
+    // Duplicate reference guard for non-cash payments
+    if (
+      method !== 'Cash' &&
+      (current.payments || []).some(
+        (p) => p.referenceId.trim().toLowerCase() === entry.referenceId.toLowerCase()
+      )
+    ) {
+      throw new Error(`Duplicate payment reference "${entry.referenceId}" already recorded on this booking.`);
+    }
+
     const prevAdvance = current.advancePaid ?? (current.paymentStatus === 'Paid' ? current.amount : 0);
+    const remainingDue = Math.max(0, current.amount - prevAdvance);
+    if (remainingDue <= 0) {
+      throw new Error('This booking folio is already fully paid.');
+    }
+    if (entry.amount > remainingDue) {
+      throw new Error(`Payment exceeds remaining balance due (₹${remainingDue.toLocaleString('en-IN')}).`);
+    }
+
     const nextAdvance = Math.min(current.amount, prevAdvance + entry.amount);
     const nextBalance = Math.max(0, current.amount - nextAdvance);
     const nextPaymentStatus =
@@ -1074,29 +1276,31 @@ export async function recordBookingPaymentAtomic(
 
     const nextPayments = [...(current.payments || []), entry];
 
-    tx.update(bRef, {
+    tx.update(bRef, stripUndefined({
       advancePaid: nextAdvance,
       balanceDue: nextBalance,
       paymentStatus: nextPaymentStatus,
       payments: nextPayments,
       updatedAt: new Date().toISOString(),
-    });
+    }));
 
-    tx.set(doc(db, 'payments', entry.id), {
+    tx.set(doc(db, 'payments', entry.id), stripUndefined({
       ...entry,
       bookingId: booking.id,
       guestName: current.guestName,
       folioNumber: current.folioNumber || current.invoice.invoiceNumber,
-    });
+    }));
 
     const invoiceDocId = current.invoice.invoiceNumber.replace(/[^\w-]/g, '_');
     tx.set(
       doc(db, 'invoices', invoiceDocId),
-      {
+      stripUndefined({
         paidAmount: nextAdvance,
         dueAmount: nextBalance,
+        paymentMethod: method,
+        paymentReference: entry.referenceId,
         status: nextPaymentStatus === 'Paid' ? 'Paid' : nextPaymentStatus === 'Partial' ? 'Partial' : 'Pending',
-      },
+      }),
       { merge: true }
     );
   });
@@ -1106,10 +1310,14 @@ export async function updateBookingFieldsInFirestore(
   bookingId: string,
   patch: Partial<Booking>
 ): Promise<void> {
-  await updateDoc(doc(db, 'bookings', bookingId), {
-    ...patch,
-    updatedAt: new Date().toISOString(),
-  });
+  try {
+    await updateDoc(doc(db, 'bookings', bookingId), stripUndefined({
+      ...patch,
+      updatedAt: new Date().toISOString(),
+    }));
+  } catch (error) {
+    handleFirestoreError(error, OperationType.UPDATE, `bookings/${bookingId}`);
+  }
 }
 
 export async function updateRoomStatusInFirestore(
@@ -1117,11 +1325,15 @@ export async function updateRoomStatusInFirestore(
   status: RoomUnit['status'],
   maintenanceNote?: string
 ): Promise<void> {
-  await setDoc(
-    doc(db, 'rooms', roomId),
-    { status, maintenanceNote: maintenanceNote || '' },
-    { merge: true }
-  );
+  try {
+    await setDoc(
+      doc(db, 'rooms', roomId),
+      stripUndefined({ status, maintenanceNote: maintenanceNote || '' }),
+      { merge: true }
+    );
+  } catch (error) {
+    handleFirestoreError(error, OperationType.UPDATE, `rooms/${roomId}`);
+  }
 }
 
 export async function uploadGuestIdDocument(guestKey: string, file: File): Promise<string> {

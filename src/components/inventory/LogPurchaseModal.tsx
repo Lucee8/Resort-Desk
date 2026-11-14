@@ -189,7 +189,7 @@ export default function LogPurchaseModal({
                 type="text"
                 value={expectedDelivery}
                 onChange={(e) => setExpectedDelivery(e.target.value)}
-                placeholder="e.g. Oct 24, 2023"
+                placeholder="e.g. Tomorrow / YYYY-MM-DD"
                 className="w-full bg-slate-50 text-xs font-semibold text-slate-800 rounded-xl px-3.5 py-2.5 border border-slate-200 focus:outline-none focus:border-teal-700"
               />
             </div>

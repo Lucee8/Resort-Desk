@@ -1,15 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { 
-  Plus, 
-  Check, 
-  Sparkles, 
-  Clock, 
-  FileCode2, 
-  MessageSquare, 
-  AlertCircle,
-  Smartphone,
-  Bot
-} from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { Sparkles, Clock, FileCode2, Smartphone } from 'lucide-react';
 
 import WhatsAppKPIHeader from './whatsapp/WhatsAppKPIHeader';
 import WorkflowBuilderCanvas from './whatsapp/WorkflowBuilderCanvas';
@@ -20,110 +10,150 @@ import TemplateManagerModal from './whatsapp/TemplateManagerModal';
 import WorkflowsListModal from './whatsapp/WorkflowsListModal';
 import MessageLogsModal from './whatsapp/MessageLogsModal';
 
-import { 
-  initialWhatsAppKPIs, 
-  initialWhatsAppTemplates, 
-  initialWorkflows, 
-  initialMyraAIInsights, 
-  initialMessageLogs 
-} from '../data/whatsappData';
-
-import { 
-  WhatsAppWorkflow, 
-  WhatsAppWorkflowNode, 
-  WhatsAppNodeType, 
-  WhatsAppTemplate, 
-  MyraAIWorkflowInsight, 
-  WhatsAppMessageLog 
+import {
+  WhatsAppWorkflow,
+  WhatsAppWorkflowNode,
+  WhatsAppNodeType,
+  WhatsAppTemplate,
+  MyraAIWorkflowInsight,
+  WhatsAppMessageLog,
+  EmailLogItem,
 } from '../types';
+import { useAuth } from '../context/AuthContext';
+import {
+  deleteCollectionDoc,
+  subscribeCollection,
+  upsertCollectionDoc,
+} from '../services/resortDataService';
+import {
+  retryFailedEmailsViaCloud,
+  retryFailedWhatsAppViaCloud,
+  subscribeEmailLogs,
+} from '../services/messagingService';
 
-export default function WhatsAppAutomationView() {
-  // 1. Workflows State (with localStorage persistence)
-  const [workflows, setWorkflows] = useState<WhatsAppWorkflow[]>(() => {
-    const saved = localStorage.getItem('resortdesk_whatsapp_workflows');
-    if (saved) {
-      try { return JSON.parse(saved); } catch (e) { /* ignore */ }
+interface WhatsAppAutomationViewProps {
+  triggerToast: (msg: string) => void;
+}
+
+export default function WhatsAppAutomationView({
+  triggerToast,
+}: WhatsAppAutomationViewProps) {
+  const { firestoreStatus } = useAuth();
+
+  const [workflows, setWorkflows] = useState<WhatsAppWorkflow[]>([]);
+  const [activeWorkflowId, setActiveWorkflowId] = useState<string>('');
+  const [templates, setTemplates] = useState<WhatsAppTemplate[]>([]);
+  const [insights, setInsights] = useState<MyraAIWorkflowInsight[]>([]);
+  const [logs, setLogs] = useState<WhatsAppMessageLog[]>([]);
+  const [emailLogs, setEmailLogs] = useState<EmailLogItem[]>([]);
+
+  useEffect(() => {
+    if (firestoreStatus === 'permission-denied') return;
+    const unsubWf = subscribeCollection<WhatsAppWorkflow>(
+      'whatsappWorkflows',
+      setWorkflows
+    );
+    const unsubTmpl = subscribeCollection<WhatsAppTemplate>(
+      'whatsappTemplates',
+      setTemplates
+    );
+    const unsubIns = subscribeCollection<MyraAIWorkflowInsight>(
+      'whatsappInsights',
+      setInsights
+    );
+    const unsubLogs = subscribeCollection<WhatsAppMessageLog>(
+      'whatsappLogs',
+      setLogs
+    );
+    const unsubEmailLogs = subscribeEmailLogs(setEmailLogs);
+    return () => {
+      unsubWf();
+      unsubTmpl();
+      unsubIns();
+      unsubLogs();
+      unsubEmailLogs();
+    };
+  }, [firestoreStatus]);
+
+  useEffect(() => {
+    if (workflows.length > 0 && !workflows.some((w) => w.id === activeWorkflowId)) {
+      setActiveWorkflowId(workflows[0].id);
     }
-    return initialWorkflows;
-  });
+  }, [workflows, activeWorkflowId]);
 
-  const [activeWorkflowId, setActiveWorkflowId] = useState<string>(() => {
-    return workflows[0]?.id || 'wf-standard-journey';
-  });
-
-  // 2. Templates State
-  const [templates, setTemplates] = useState<WhatsAppTemplate[]>(() => {
-    const saved = localStorage.getItem('resortdesk_whatsapp_templates');
-    if (saved) {
-      try { return JSON.parse(saved); } catch (e) { /* ignore */ }
-    }
-    return initialWhatsAppTemplates;
-  });
-
-  // 3. AI Insights State
-  const [insights, setInsights] = useState<MyraAIWorkflowInsight[]>(() => {
-    const saved = localStorage.getItem('resortdesk_whatsapp_insights');
-    if (saved) {
-      try { return JSON.parse(saved); } catch (e) { /* ignore */ }
-    }
-    return initialMyraAIInsights;
-  });
-
-  // 4. Message Logs State
-  const [logs, setLogs] = useState<WhatsAppMessageLog[]>(initialMessageLogs);
-
-  // 5. Header Filters State
   const [searchQuery, setSearchQuery] = useState('');
   const [dateFilter, setDateFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
 
-  // 6. Modals State
-  const [selectedNodeToEdit, setSelectedNodeToEdit] = useState<WhatsAppWorkflowNode | null>(null);
+  const [selectedNodeToEdit, setSelectedNodeToEdit] =
+    useState<WhatsAppWorkflowNode | null>(null);
   const [isNodeModalOpen, setIsNodeModalOpen] = useState(false);
   const [isSimulatorOpen, setIsSimulatorOpen] = useState(false);
   const [isTemplatesModalOpen, setIsTemplatesModalOpen] = useState(false);
   const [isWorkflowsModalOpen, setIsWorkflowsModalOpen] = useState(false);
   const [isLogsModalOpen, setIsLogsModalOpen] = useState(false);
 
-  // 7. Toast Notification State
-  const [toastMessage, setToastMessage] = useState<string | null>(null);
-  const triggerToast = (msg: string) => {
-    setToastMessage(msg);
-    setTimeout(() => setToastMessage(null), 3000);
+  const activeWorkflow =
+    workflows.find((w) => w.id === activeWorkflowId) || workflows[0];
+
+  const kpiData = useMemo(() => {
+    const activeCount = workflows.filter((w) => w.status === 'active').length;
+    const totalMessages = logs.length;
+    const deliveredCount = logs.filter(
+      (l) => l.status === 'delivered' || l.status === 'read'
+    ).length;
+    const readCount = logs.filter((l) => l.status === 'read').length;
+
+    return {
+      activeWorkflows: activeCount,
+      totalWorkflows: workflows.length,
+      messagesSent30d: totalMessages,
+      messagesTrend: `${logs.length} logged`,
+      deliveryRate:
+        totalMessages > 0 ? Math.round((deliveredCount / totalMessages) * 100) : 100,
+      readRate: totalMessages > 0 ? Math.round((readCount / totalMessages) * 100) : 0,
+      aiResolvedConversations: workflows.reduce(
+        (s, w) => s + (w.totalCompleted || 0),
+        0
+      ),
+      humanHandoffRate: 12,
+    };
+  }, [workflows, logs]);
+
+  const saveWorkflowToFirestore = async (
+    updatedWf: WhatsAppWorkflow,
+    successMsg?: string
+  ) => {
+    try {
+      await upsertCollectionDoc('whatsappWorkflows', updatedWf);
+      if (successMsg) triggerToast(successMsg);
+    } catch (err) {
+      triggerToast(
+        err instanceof Error ? err.message : 'Failed to save workflow to Firestore.'
+      );
+    }
   };
 
-  const activeWorkflow = workflows.find(w => w.id === activeWorkflowId) || workflows[0];
-
-  // Save changes to localStorage helper
-  const updateWorkflowState = (newWorkflows: WhatsAppWorkflow[]) => {
-    setWorkflows(newWorkflows);
-    localStorage.setItem('resortdesk_whatsapp_workflows', JSON.stringify(newWorkflows));
-  };
-
-  // Node editing handlers
   const handleNodeClick = (node: WhatsAppWorkflowNode) => {
     setSelectedNodeToEdit(node);
     setIsNodeModalOpen(true);
   };
 
-  const handleSaveNodeConfig = (updatedNode: WhatsAppWorkflowNode) => {
+  const handleSaveNodeConfig = async (updatedNode: WhatsAppWorkflowNode) => {
     if (!activeWorkflow) return;
-    const nextNodes = activeWorkflow.nodes.map(n => n.id === updatedNode.id ? updatedNode : n);
-    const updatedWf = {
-      ...activeWorkflow,
-      nodes: nextNodes,
-      updatedAt: 'Just now'
-    };
-    const nextList = workflows.map(w => w.id === updatedWf.id ? updatedWf : w);
-    updateWorkflowState(nextList);
-    triggerToast(`Updated step: "${updatedNode.title}"`);
+    const nextNodes = activeWorkflow.nodes.map((n) =>
+      n.id === updatedNode.id ? updatedNode : n
+    );
+    await saveWorkflowToFirestore(
+      { ...activeWorkflow, nodes: nextNodes, updatedAt: 'Just now' },
+      `Updated step "${updatedNode.title}" in Firestore.`
+    );
   };
 
-  const handleAddNodeAfter = (index: number, type: WhatsAppNodeType) => {
+  const handleAddNodeAfter = async (index: number, type: WhatsAppNodeType) => {
     if (!activeWorkflow) return;
-
-    let newNode: WhatsAppWorkflowNode;
     const newId = `node-${Date.now()}`;
+    let newNode: WhatsAppWorkflowNode;
 
     switch (type) {
       case 'wait':
@@ -135,35 +165,23 @@ export default function WhatsAppAutomationView() {
           config: {
             waitDuration: 1,
             waitUnit: 'hours',
-            waitTimingType: 'after_previous'
-          }
-        };
-        break;
-      case 'action':
-        newNode = {
-          id: newId,
-          type: 'action',
-          title: 'Send Custom WhatsApp Message',
-          subtitle: 'Utility or Concierge message',
-          badgeLabel: 'ACTION',
-          config: {
-            messageText: 'Hi {{GuestName}}, thank you for connecting with {{ResortName}} concierge.',
-            buttons: [{ type: 'quick_reply', label: 'View Resort Services' }]
-          }
+            waitTimingType: 'after_previous',
+          },
         };
         break;
       case 'ai_action':
         newNode = {
           id: newId,
           type: 'ai_action',
-          title: 'Myra AI Smart Concierge',
-          subtitle: 'Automated 24/7 guest answers',
+          title: 'Concierge Auto-Response',
+          subtitle: '24/7 guest Q&A',
           badgeLabel: 'AI AGENT',
           config: {
-            aiPrompt: 'Respond politely to guest inquiries about dining, spa, and pool amenities using ResortDesk knowledge base.',
+            aiPrompt:
+              'Respond politely to Mykonos Cottage Tarkarli guest inquiries about check-in, dining, and scuba trips.',
             aiTone: 'Warm & Hospitable',
-            fallbackToHuman: true
-          }
+            fallbackToHuman: true,
+          },
         };
         break;
       case 'condition':
@@ -175,213 +193,186 @@ export default function WhatsAppAutomationView() {
           config: {
             conditionField: 'has_replied',
             conditionOperator: 'is_true',
-            trueBranchLabel: 'Engage Myra AI',
-            falseBranchLabel: 'Continue Timeline'
-          }
+            trueBranchLabel: 'Engage Concierge',
+            falseBranchLabel: 'Continue Timeline',
+          },
         };
         break;
       case 'notification':
         newNode = {
           id: newId,
           type: 'notification',
-          title: 'Notify Front Office Manager',
+          title: 'Notify Front Desk Manager',
           subtitle: 'Internal staff alert',
           badgeLabel: 'STAFF NOTIFY',
           config: {
             notifyRole: 'front_desk',
             notificationTitle: 'Guest Request Logged',
-            notificationBody: 'Guest in {{RoomNumber}} initiated inquiry.'
-          }
+            notificationBody: 'Guest in {{RoomNumber}} initiated WhatsApp inquiry.',
+          },
         };
         break;
       default:
         newNode = {
           id: newId,
           type: 'action',
-          title: 'Send Message',
+          title: 'Send WhatsApp Message',
+          subtitle: 'Utility or Concierge message',
           badgeLabel: 'ACTION',
-          config: { messageText: 'Hello {{GuestName}}!' }
+          config: {
+            messageText:
+              'Hi {{GuestName}}, thank you for booking with Mykonos Cottage, Tarkarli.',
+            buttons: [{ type: 'quick_reply', label: 'Directions & Check-in' }],
+          },
         };
     }
 
     const nextNodes = [...activeWorkflow.nodes];
     nextNodes.splice(index + 1, 0, newNode);
 
-    const updatedWf = {
-      ...activeWorkflow,
-      nodes: nextNodes,
-      updatedAt: 'Just now'
-    };
-    const nextList = workflows.map(w => w.id === updatedWf.id ? updatedWf : w);
-    updateWorkflowState(nextList);
-    triggerToast(`Added new step: "${newNode.title}"`);
+    await saveWorkflowToFirestore(
+      { ...activeWorkflow, nodes: nextNodes, updatedAt: 'Just now' },
+      `Added step "${newNode.title}".`
+    );
   };
 
-  const handleDeleteNode = (nodeId: string) => {
+  const handleDeleteNode = async (nodeId: string) => {
     if (!activeWorkflow) return;
-    const nextNodes = activeWorkflow.nodes.filter(n => n.id !== nodeId);
-    const updatedWf = {
-      ...activeWorkflow,
-      nodes: nextNodes,
-      updatedAt: 'Just now'
-    };
-    const nextList = workflows.map(w => w.id === updatedWf.id ? updatedWf : w);
-    updateWorkflowState(nextList);
-    triggerToast('Step removed from journey');
+    const nextNodes = activeWorkflow.nodes.filter((n) => n.id !== nodeId);
+    await saveWorkflowToFirestore(
+      { ...activeWorkflow, nodes: nextNodes, updatedAt: 'Just now' },
+      'Step removed from journey.'
+    );
   };
 
-  const handleDuplicateNode = (nodeId: string) => {
+  const handleDuplicateNode = async (nodeId: string) => {
     if (!activeWorkflow) return;
-    const idx = activeWorkflow.nodes.findIndex(n => n.id === nodeId);
+    const idx = activeWorkflow.nodes.findIndex((n) => n.id === nodeId);
     if (idx === -1) return;
-
     const original = activeWorkflow.nodes[idx];
     const duplicate: WhatsAppWorkflowNode = {
       ...original,
       id: `node-${Date.now()}`,
-      title: `${original.title} (Copy)`
+      title: `${original.title} (Copy)`,
     };
-
     const nextNodes = [...activeWorkflow.nodes];
     nextNodes.splice(idx + 1, 0, duplicate);
-
-    const updatedWf = {
-      ...activeWorkflow,
-      nodes: nextNodes,
-      updatedAt: 'Just now'
-    };
-    const nextList = workflows.map(w => w.id === updatedWf.id ? updatedWf : w);
-    updateWorkflowState(nextList);
-    triggerToast(`Duplicated step "${original.title}"`);
+    await saveWorkflowToFirestore(
+      { ...activeWorkflow, nodes: nextNodes, updatedAt: 'Just now' },
+      `Duplicated step "${original.title}".`
+    );
   };
 
-  const handleMoveNode = (index: number, direction: 'up' | 'down') => {
+  const handleMoveNode = async (index: number, direction: 'up' | 'down') => {
     if (!activeWorkflow) return;
     const nextNodes = [...activeWorkflow.nodes];
     const targetIdx = direction === 'up' ? index - 1 : index + 1;
     if (targetIdx < 0 || targetIdx >= nextNodes.length) return;
-
     const temp = nextNodes[index];
     nextNodes[index] = nextNodes[targetIdx];
     nextNodes[targetIdx] = temp;
-
-    const updatedWf = {
+    await saveWorkflowToFirestore({
       ...activeWorkflow,
       nodes: nextNodes,
-      updatedAt: 'Just now'
-    };
-    const nextList = workflows.map(w => w.id === updatedWf.id ? updatedWf : w);
-    updateWorkflowState(nextList);
+      updatedAt: 'Just now',
+    });
   };
 
-  // Draft and Publish Handlers
-  const handleSaveDraft = () => {
+  const handleSaveDraft = async () => {
     if (!activeWorkflow) return;
-    const updatedWf = {
-      ...activeWorkflow,
-      status: 'draft' as const,
-      updatedAt: 'Just now'
-    };
-    const nextList = workflows.map(w => w.id === updatedWf.id ? updatedWf : w);
-    updateWorkflowState(nextList);
-    triggerToast(`Workflow "${activeWorkflow.name}" saved as draft.`);
+    await saveWorkflowToFirestore(
+      { ...activeWorkflow, status: 'draft', updatedAt: 'Just now' },
+      `Workflow "${activeWorkflow.name}" saved as draft in Firestore.`
+    );
   };
 
-  const handlePublish = () => {
+  const handlePublish = async () => {
     if (!activeWorkflow) return;
-
-    // Validation checks before publishing
     const invalidNodes = activeWorkflow.nodes.filter(
-      n => n.type === 'action' && (!n.config.messageText || n.config.messageText.trim() === '')
+      (n) =>
+        n.type === 'action' &&
+        (!n.config.messageText || n.config.messageText.trim() === '')
     );
 
     if (invalidNodes.length > 0) {
-      alert('Validation Error: One or more WhatsApp Message steps are missing message content. Please configure them before publishing.');
+      triggerToast(
+        'Validation Error: One or more WhatsApp message steps are missing message content.'
+      );
       return;
     }
 
-    const updatedWf = {
-      ...activeWorkflow,
-      status: 'active' as const,
-      updatedAt: 'Just now'
-    };
-    const nextList = workflows.map(w => w.id === updatedWf.id ? updatedWf : w);
-    updateWorkflowState(nextList);
-    triggerToast(`🎉 Successfully published "${activeWorkflow.name}" to live WhatsApp Cloud API!`);
+    await saveWorkflowToFirestore(
+      { ...activeWorkflow, status: 'active', updatedAt: 'Just now' },
+      `Workflow "${activeWorkflow.name}" saved & activated in Firestore (configure Meta Webhook for automated background sends).`
+    );
   };
 
-  // Myra AI Panel Action Handlers
-  const handleApplyInsight = (insight: MyraAIWorkflowInsight) => {
+  const handleApplyInsight = async (insight: MyraAIWorkflowInsight) => {
     if (!activeWorkflow) return;
-
     if (insight.suggestedNode) {
-      // Insert after welcome message or at index 5
       const nextNodes = [...activeWorkflow.nodes];
       const insertPos = Math.min(nextNodes.length - 1, 5);
       nextNodes.splice(insertPos, 0, {
         ...insight.suggestedNode,
-        id: `ai-node-${Date.now()}`
+        id: `ai-node-${Date.now()}`,
       });
-
-      const updatedWf = {
+      await saveWorkflowToFirestore({
         ...activeWorkflow,
         nodes: nextNodes,
-        updatedAt: 'Just now'
-      };
-      const nextList = workflows.map(w => w.id === updatedWf.id ? updatedWf : w);
-      updateWorkflowState(nextList);
+        updatedAt: 'Just now',
+      });
     }
-
-    // Remove or mark applied
-    const nextInsights = insights.filter(i => i.id !== insight.id);
-    setInsights(nextInsights);
-    localStorage.setItem('resortdesk_whatsapp_insights', JSON.stringify(nextInsights));
-    triggerToast(`Myra AI optimization applied: ${insight.title}`);
+    try {
+      await deleteCollectionDoc('whatsappInsights', insight.id);
+    } catch {
+      // ignore if already removed
+    }
+    triggerToast(`Applied suggestion: ${insight.title}`);
   };
 
-  const handleDismissInsight = (insightId: string) => {
-    const nextInsights = insights.filter(i => i.id !== insightId);
-    setInsights(nextInsights);
-    localStorage.setItem('resortdesk_whatsapp_insights', JSON.stringify(nextInsights));
-    triggerToast('Recommendation dismissed');
+  const handleDismissInsight = async (insightId: string) => {
+    try {
+      await deleteCollectionDoc('whatsappInsights', insightId);
+      triggerToast('Recommendation dismissed.');
+    } catch (err) {
+      triggerToast(
+        err instanceof Error ? err.message : 'Failed to dismiss recommendation.'
+      );
+    }
   };
 
-  const handleInsertTemplate = (template: WhatsAppTemplate) => {
+  const handleInsertTemplate = async (template: WhatsAppTemplate) => {
     if (!activeWorkflow) return;
-
     const newActionNode: WhatsAppWorkflowNode = {
       id: `tmpl-node-${Date.now()}`,
       type: 'action',
-      title: template.name.replace(/resort_|v\d+|_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
+      title: template.name
+        .replace(/resort_|v\d+|_/g, ' ')
+        .replace(/\b\w/g, (l) => l.toUpperCase()),
       subtitle: template.name,
       badgeLabel: 'ACTION',
       config: {
         templateId: template.id,
         templateName: template.name,
         messageText: template.body,
-        buttons: template.buttons
-      }
+        buttons: template.buttons,
+      },
     };
-
     const nextNodes = [...activeWorkflow.nodes];
     const insertPos = Math.max(0, nextNodes.length - 1);
     nextNodes.splice(insertPos, 0, newActionNode);
 
-    const updatedWf = {
-      ...activeWorkflow,
-      nodes: nextNodes,
-      updatedAt: 'Just now'
-    };
-    const nextList = workflows.map(w => w.id === updatedWf.id ? updatedWf : w);
-    updateWorkflowState(nextList);
-    triggerToast(`Added template step: "${newActionNode.title}"`);
+    await saveWorkflowToFirestore(
+      { ...activeWorkflow, nodes: nextNodes, updatedAt: 'Just now' },
+      `Added template step "${newActionNode.title}".`
+    );
   };
 
-  const handleCreateNewWorkflow = () => {
+  const handleCreateNewWorkflow = async () => {
     const newWf: WhatsAppWorkflow = {
       id: `wf-custom-${Date.now()}`,
-      name: 'New Custom Guest Journey',
-      description: 'Custom automated guest messaging sequence for ResortDesk.',
+      name: 'New Mykonos Guest Journey',
+      description: 'Guest messaging workflow for Mykonos Cottage, Tarkarli.',
       triggerType: 'Booking Created (Direct & OTA)',
       status: 'draft',
       createdAt: 'Today',
@@ -396,13 +387,17 @@ export default function WhatsAppAutomationView() {
           title: 'Booking Created',
           subtitle: 'All channels',
           badgeLabel: 'TRIGGER',
-          config: { triggerEvent: 'booking_created' }
+          config: { triggerEvent: 'booking_created' },
         },
         {
           id: `node-c2-${Date.now()}`,
           type: 'wait',
           title: 'Wait 5m',
-          config: { waitDuration: 5, waitUnit: 'minutes', waitTimingType: 'after_previous' }
+          config: {
+            waitDuration: 5,
+            waitUnit: 'minutes',
+            waitTimingType: 'after_previous',
+          },
         },
         {
           id: `node-c3-${Date.now()}`,
@@ -410,36 +405,29 @@ export default function WhatsAppAutomationView() {
           title: 'Send Confirmation',
           badgeLabel: 'ACTION',
           config: {
-            messageText: 'Hi {{GuestName}}, your reservation at {{ResortName}} is confirmed for {{CheckInDate}} in {{RoomNumber}}.'
-          }
+            messageText:
+              'Hi {{GuestName}}, your reservation at Mykonos Cottage, Tarkarli is confirmed for {{CheckInDate}} in {{RoomNumber}}.',
+          },
         },
         {
           id: `node-c4-${Date.now()}`,
           type: 'end',
           title: 'Workflow Completed',
           badgeLabel: 'END',
-          config: {}
-        }
-      ]
+          config: {},
+        },
+      ],
     };
 
-    const nextList = [newWf, ...workflows];
-    updateWorkflowState(nextList);
+    await saveWorkflowToFirestore(newWf, 'Created new draft workflow in Firestore.');
     setActiveWorkflowId(newWf.id);
-    triggerToast('Created new draft workflow!');
   };
 
   return (
-    <div id="whatsapp-automation-view" className="flex-1 flex flex-col p-6 bg-[#fcfdfd] overflow-y-auto font-sans relative min-h-screen">
-      {/* Toast Notification Alert */}
-      {toastMessage && (
-        <div className="fixed top-5 right-5 z-50 bg-slate-900 text-white px-4 py-2.5 rounded-xl shadow-xl flex items-center gap-2 text-xs font-semibold animate-in slide-in-from-top-3 fade-in duration-200">
-          <Sparkles className="w-4 h-4 text-emerald-400" />
-          <span>{toastMessage}</span>
-        </div>
-      )}
-
-      {/* Top Section: Title, Search, Date/Status Filters, + Create Automation & 5 KPI Cards */}
+    <div
+      id="whatsapp-automation-view"
+      className="flex-1 flex flex-col bg-[#fcfdfd] overflow-x-hidden font-sans relative min-h-screen"
+    >
       <WhatsAppKPIHeader
         searchQuery={searchQuery}
         setSearchQuery={setSearchQuery}
@@ -447,100 +435,100 @@ export default function WhatsAppAutomationView() {
         setDateFilter={setDateFilter}
         statusFilter={statusFilter}
         setStatusFilter={setStatusFilter}
-        onCreateAutomation={handleCreateNewWorkflow}
+        onCreateAutomation={() => void handleCreateNewWorkflow()}
         onViewAllAutomations={() => setIsWorkflowsModalOpen(true)}
-        kpiData={initialWhatsAppKPIs}
+        kpiData={kpiData}
       />
 
-      {/* Quick Navigation Action Strip for Power Users */}
-      <div className="flex items-center justify-between gap-3 mb-4 text-xs">
-        <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-4 text-xs">
+        <div className="flex flex-wrap items-center gap-2">
           <span className="text-slate-400 font-medium">Quick Access:</span>
           <button
+            type="button"
             onClick={() => setIsWorkflowsModalOpen(true)}
             className="text-slate-600 hover:text-teal-900 bg-white border border-slate-200/80 px-2.5 py-1 rounded-lg font-medium transition-colors shadow-2xs cursor-pointer"
           >
             All Workflows ({workflows.length})
           </button>
           <button
+            type="button"
             onClick={() => setIsTemplatesModalOpen(true)}
             className="text-slate-600 hover:text-teal-900 bg-white border border-slate-200/80 px-2.5 py-1 rounded-lg font-medium transition-colors shadow-2xs cursor-pointer flex items-center gap-1"
           >
             <FileCode2 className="w-3 h-3 text-slate-400" />
-            Meta Templates ({templates.length})
+            <span>Templates ({templates.length})</span>
           </button>
           <button
+            type="button"
             onClick={() => setIsLogsModalOpen(true)}
             className="text-slate-600 hover:text-teal-900 bg-white border border-slate-200/80 px-2.5 py-1 rounded-lg font-medium transition-colors shadow-2xs cursor-pointer flex items-center gap-1"
           >
             <Clock className="w-3 h-3 text-slate-400" />
-            Live Delivery Logs ({logs.length})
+            <span>Dispatch Logs ({logs.length})</span>
           </button>
         </div>
 
-        <button
-          onClick={() => setIsSimulatorOpen(true)}
-          className="text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-3 py-1 rounded-lg font-semibold transition-colors flex items-center gap-1.5 cursor-pointer shadow-2xs"
-        >
-          <Smartphone className="w-3.5 h-3.5" />
-          <span>Launch WhatsApp Smartphone Simulator</span>
-        </button>
+        {activeWorkflow && (
+          <button
+            type="button"
+            onClick={() => setIsSimulatorOpen(true)}
+            className="text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-3 py-1 rounded-lg font-semibold transition-colors flex items-center gap-1.5 cursor-pointer shadow-2xs"
+          >
+            <Smartphone className="w-3.5 h-3.5" />
+            <span>Preview Chat Simulator</span>
+          </button>
+        )}
       </div>
 
-      {/* Main 2-Column Section: Workflow Canvas (Left) & Myra AI Assistant Panel (Right) */}
-      <div className="flex flex-col lg:flex-row items-start gap-6 flex-1">
-        {/* Left: Workflow Builder Canvas */}
-        <WorkflowBuilderCanvas
-          workflow={activeWorkflow}
-          allWorkflows={workflows}
-          onSelectWorkflow={(wf) => setActiveWorkflowId(wf.id)}
-          onUpdateWorkflow={(wf) => {
-            const nextList = workflows.map(w => w.id === wf.id ? wf : w);
-            updateWorkflowState(nextList);
-          }}
-          onSaveDraft={handleSaveDraft}
-          onPublish={handlePublish}
-          onNodeClick={handleNodeClick}
-          onAddNodeAfter={handleAddNodeAfter}
-          onDeleteNode={handleDeleteNode}
-          onDuplicateNode={handleDuplicateNode}
-          onMoveNode={handleMoveNode}
-          onOpenSimulator={() => setIsSimulatorOpen(true)}
-          onManageTemplates={() => setIsTemplatesModalOpen(true)}
-        />
+      {activeWorkflow ? (
+        <div className="flex flex-col lg:flex-row items-start gap-6 flex-1 min-w-0">
+          <WorkflowBuilderCanvas
+            workflow={activeWorkflow}
+            allWorkflows={workflows}
+            onSelectWorkflow={(wf) => setActiveWorkflowId(wf.id)}
+            onUpdateWorkflow={(wf) => void saveWorkflowToFirestore(wf)}
+            onSaveDraft={() => void handleSaveDraft()}
+            onPublish={() => void handlePublish()}
+            onNodeClick={handleNodeClick}
+            onAddNodeAfter={(i, t) => void handleAddNodeAfter(i, t)}
+            onDeleteNode={(id) => void handleDeleteNode(id)}
+            onDuplicateNode={(id) => void handleDuplicateNode(id)}
+            onMoveNode={(i, d) => void handleMoveNode(i, d)}
+            onOpenSimulator={() => setIsSimulatorOpen(true)}
+            onManageTemplates={() => setIsTemplatesModalOpen(true)}
+          />
 
-        {/* Right: Myra AI Assistant Panel */}
-        <MyraAIAssistantPanel
-          insights={insights}
-          suggestedTemplates={templates.slice(2, 6)}
-          onApplyInsight={handleApplyInsight}
-          onDismissInsight={handleDismissInsight}
-          onInsertTemplate={handleInsertTemplate}
-          onAnalyzeWorkflow={() => {
-            triggerToast('Myra AI audit completed: 0 critical friction points detected.');
-          }}
-        />
-      </div>
+          <MyraAIAssistantPanel
+            insights={insights}
+            suggestedTemplates={templates.slice(0, 4)}
+            onApplyInsight={(ins) => void handleApplyInsight(ins)}
+            onDismissInsight={(id) => void handleDismissInsight(id)}
+            onInsertTemplate={(tmpl) => void handleInsertTemplate(tmpl)}
+            onAnalyzeWorkflow={() => {
+              triggerToast(
+                `Audited "${activeWorkflow.name}": ${activeWorkflow.nodes.length} steps configured.`
+              );
+            }}
+          />
+        </div>
+      ) : (
+        <div className="bg-white border border-slate-200 rounded-3xl p-10 text-center space-y-3">
+          <Sparkles className="w-8 h-8 text-teal-700 mx-auto" />
+          <h3 className="font-bold text-slate-900">No WhatsApp Workflows Yet</h3>
+          <p className="text-xs text-slate-500">
+            Create your first automated guest welcome journey or initialize starter data
+            from the Dashboard.
+          </p>
+          <button
+            type="button"
+            onClick={() => void handleCreateNewWorkflow()}
+            className="px-4 py-2 bg-teal-800 text-white text-xs font-bold rounded-xl cursor-pointer"
+          >
+            Create First Workflow
+          </button>
+        </div>
+      )}
 
-      {/* Floating Bottom-Right AI Trigger Button */}
-      <div className="fixed bottom-6 right-6 z-30">
-        <button
-          onClick={() => {
-            if (insights.length > 0) {
-              handleApplyInsight(insights[0]);
-            } else {
-              triggerToast('Myra AI Concierge is actively optimizing all workflows in the background.');
-            }
-          }}
-          title="Myra AI Quick Assist"
-          className="w-12 h-12 rounded-full bg-[#2e1d7a] hover:bg-[#201563] text-white flex items-center justify-center shadow-lg shadow-purple-900/30 hover:scale-105 transition-all cursor-pointer"
-        >
-          <Sparkles className="w-5 h-5 fill-white/20 text-white" />
-        </button>
-      </div>
-
-      {/* MODALS */}
-      {/* 1. Node Configuration Modal */}
       <NodeConfigModal
         node={selectedNodeToEdit}
         templates={templates}
@@ -549,51 +537,45 @@ export default function WhatsAppAutomationView() {
           setIsNodeModalOpen(false);
           setSelectedNodeToEdit(null);
         }}
-        onSaveNode={handleSaveNodeConfig}
+        onSaveNode={(n) => void handleSaveNodeConfig(n)}
       />
 
-      {/* 2. WhatsApp Smartphone Simulator Modal */}
-      <WhatsAppChatSimulator
-        workflow={activeWorkflow}
-        targetNode={selectedNodeToEdit}
-        isOpen={isSimulatorOpen}
-        onClose={() => setIsSimulatorOpen(false)}
-      />
+      {activeWorkflow && (
+        <WhatsAppChatSimulator
+          workflow={activeWorkflow}
+          targetNode={selectedNodeToEdit}
+          isOpen={isSimulatorOpen}
+          onClose={() => setIsSimulatorOpen(false)}
+        />
+      )}
 
-      {/* 3. WhatsApp Template Library Modal */}
       <TemplateManagerModal
         templates={templates}
         isOpen={isTemplatesModalOpen}
         onClose={() => setIsTemplatesModalOpen(false)}
         onCreateTemplate={(newTmpl) => {
-          const next = [newTmpl, ...templates];
-          setTemplates(next);
-          localStorage.setItem('resortdesk_whatsapp_templates', JSON.stringify(next));
-          triggerToast(`Template "${newTmpl.name}" created and approved.`);
+          void upsertCollectionDoc('whatsappTemplates', newTmpl).then(() =>
+            triggerToast(`Template "${newTmpl.name}" saved to Firestore.`)
+          );
         }}
-        onSelectTemplateForWorkflow={(tmpl) => {
-          handleInsertTemplate(tmpl);
-        }}
+        onSelectTemplateForWorkflow={(tmpl) => void handleInsertTemplate(tmpl)}
       />
 
-      {/* 4. All Workflows List Modal */}
       <WorkflowsListModal
         workflows={workflows}
         activeWorkflowId={activeWorkflowId}
         isOpen={isWorkflowsModalOpen}
         onClose={() => setIsWorkflowsModalOpen(false)}
         onSelectWorkflow={(wf) => setActiveWorkflowId(wf.id)}
-        onCreateNewWorkflow={handleCreateNewWorkflow}
+        onCreateNewWorkflow={() => void handleCreateNewWorkflow()}
         onToggleStatus={(wfId) => {
-          const next = workflows.map(w => {
-            if (w.id === wfId) {
-              const newSt = w.status === 'active' ? 'paused' : 'active';
-              return { ...w, status: newSt as any };
-            }
-            return w;
-          });
-          updateWorkflowState(next);
-          triggerToast('Workflow status updated');
+          const target = workflows.find((w) => w.id === wfId);
+          if (!target) return;
+          const nextSt = target.status === 'active' ? 'paused' : 'active';
+          void saveWorkflowToFirestore(
+            { ...target, status: nextSt },
+            `Workflow status set to ${nextSt}.`
+          );
         }}
         onDuplicateWorkflow={(wf) => {
           const dup: WhatsAppWorkflow = {
@@ -602,18 +584,25 @@ export default function WhatsAppAutomationView() {
             name: `${wf.name} (Copy)`,
             status: 'draft',
             createdAt: 'Today',
-            updatedAt: 'Just now'
+            updatedAt: 'Just now',
           };
-          updateWorkflowState([dup, ...workflows]);
-          triggerToast(`Duplicated workflow "${wf.name}"`);
+          void saveWorkflowToFirestore(dup, `Duplicated "${wf.name}" to Firestore.`);
         }}
       />
 
-      {/* 5. Live Message Logs Modal */}
       <MessageLogsModal
         logs={logs}
+        emailLogs={emailLogs}
         isOpen={isLogsModalOpen}
         onClose={() => setIsLogsModalOpen(false)}
+        onRetryWhatsApp={async () => {
+          const res = await retryFailedWhatsAppViaCloud();
+          triggerToast(res.message);
+        }}
+        onRetryEmails={async () => {
+          const res = await retryFailedEmailsViaCloud();
+          triggerToast(res.message);
+        }}
       />
     </div>
   );

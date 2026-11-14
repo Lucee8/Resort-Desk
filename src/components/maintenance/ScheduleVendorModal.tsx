@@ -1,25 +1,35 @@
 import React, { useState } from 'react';
-import { X, Building2, Calendar, Clock, DollarSign, Wrench, ShieldAlert, CheckCircle2 } from 'lucide-react';
+import { X, Building2 } from 'lucide-react';
+import { getTodayISO } from '../../utils/bookingUtils';
 
 interface ScheduleVendorModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onVendorScheduled: (vendorDetails: any) => void;
+  onVendorScheduled: (vendorDetails: {
+    vendorName: string;
+    trade: string;
+    roomArea: string;
+    scheduledDate: string;
+    scheduledTime: string;
+    estimatedCost: string;
+    isEmergency: boolean;
+    notes: string;
+  }) => void;
 }
 
 export default function ScheduleVendorModal({
   isOpen,
   onClose,
-  onVendorScheduled
+  onVendorScheduled,
 }: ScheduleVendorModalProps) {
-  const [vendorName, setVendorName] = useState('Daikin HVAC Commercial Services');
-  const [trade, setTrade] = useState('Central VRV / Inverter Air Conditioning');
-  const [roomArea, setRoomArea] = useState('Deluxe Villa #104 / HVAC Plant A');
-  const [scheduledDate, setScheduledDate] = useState('2026-10-25');
+  const [vendorName, setVendorName] = useState('Konkan Cooling & HVAC Services');
+  const [trade, setTrade] = useState('Split & VRV Air Conditioning');
+  const [roomArea, setRoomArea] = useState('Mykonos Cottage 101 / HVAC');
+  const [scheduledDate, setScheduledDate] = useState(getTodayISO());
   const [scheduledTime, setScheduledTime] = useState('11:00 AM');
-  const [estimatedCost, setEstimatedCost] = useState('4500');
+  const [estimatedCost, setEstimatedCost] = useState('2500');
   const [isEmergency, setIsEmergency] = useState(false);
-  const [notes, setNotes] = useState('Major compressor diagnostic and refrigerant coil pressure test.');
+  const [notes, setNotes] = useState('Compressor diagnostic and coil service.');
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -31,19 +41,16 @@ export default function ScheduleVendorModal({
       scheduledTime,
       estimatedCost,
       isEmergency,
-      notes
+      notes,
     });
-    alert(`External vendor appointment scheduled with ${vendorName} for ${scheduledDate} at ${scheduledTime}.`);
     onClose();
   };
 
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 sm:p-6 font-sans animate-in fade-in duration-200">
+    <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 sm:p-6 font-sans">
       <div className="bg-white rounded-3xl max-w-lg w-full border border-slate-200 shadow-2xl overflow-hidden max-h-[90vh] flex flex-col">
-        
-        {/* Header */}
         <div className="px-6 py-5 border-b border-slate-200/80 bg-slate-50 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-2xl bg-teal-800 text-white flex items-center justify-center shadow-xs">
@@ -54,20 +61,20 @@ export default function ScheduleVendorModal({
                 Schedule External Vendor
               </h3>
               <p className="text-xs text-slate-500">
-                Book certified 3rd-party engineering or OEM contractors
+                Book local Sindhudurg / Malvan engineering contractors
               </p>
             </div>
           </div>
 
           <button
+            type="button"
             onClick={onClose}
-            className="w-8 h-8 rounded-full bg-slate-200/70 hover:bg-slate-300 flex items-center justify-center text-slate-600 transition-colors"
+            className="w-8 h-8 rounded-full bg-slate-200/70 hover:bg-slate-300 flex items-center justify-center text-slate-600 transition-colors cursor-pointer"
           >
             <X className="w-4 h-4" />
           </button>
         </div>
 
-        {/* Form */}
         <form onSubmit={handleSubmit} className="p-6 overflow-y-auto space-y-4 flex-1">
           <div>
             <label className="block text-xs font-bold text-slate-700 mb-1">
@@ -78,11 +85,19 @@ export default function ScheduleVendorModal({
               onChange={(e) => setVendorName(e.target.value)}
               className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm font-medium"
             >
-              <option value="Daikin HVAC Commercial Services">Daikin HVAC Commercial Services</option>
-              <option value="Kohler Commercial Sanitary Engineering">Kohler Commercial Sanitary Engineering</option>
-              <option value="Schneider Electric Facility Services">Schneider Electric Facility Services</option>
-              <option value="Pentair Pool Automation Systems">Pentair Pool Automation Systems</option>
-              <option value="Dormakaba RFID Lock Systems">Dormakaba RFID Lock Systems</option>
+              <option value="Konkan Cooling & HVAC Services">
+                Konkan Cooling &amp; HVAC Services
+              </option>
+              <option value="Malvan Sanitary & Plumbing Works">
+                Malvan Sanitary &amp; Plumbing Works
+              </option>
+              <option value="Sindhudurg Solar & Electricals">
+                Sindhudurg Solar &amp; Electricals
+              </option>
+              <option value="Coastal Pool Care Systems">Coastal Pool Care Systems</option>
+              <option value="Dormakaba RFID Lock Systems">
+                Dormakaba RFID Lock Systems
+              </option>
             </select>
           </div>
 
@@ -100,7 +115,7 @@ export default function ScheduleVendorModal({
 
           <div>
             <label className="block text-xs font-bold text-slate-700 mb-1">
-              Target Location / Villa / Facility
+              Target Cottage / Facility
             </label>
             <input
               type="text"
@@ -138,7 +153,7 @@ export default function ScheduleVendorModal({
 
           <div>
             <label className="block text-xs font-bold text-slate-700 mb-1">
-              Estimated Vendor Quote (₹ / $)
+              Estimated Vendor Quote (₹)
             </label>
             <input
               type="number"
@@ -150,7 +165,7 @@ export default function ScheduleVendorModal({
 
           <div>
             <label className="block text-xs font-bold text-slate-700 mb-1">
-              Scope of Work & Notes
+              Scope of Work &amp; Notes
             </label>
             <textarea
               rows={2}
@@ -168,8 +183,11 @@ export default function ScheduleVendorModal({
               onChange={(e) => setIsEmergency(e.target.checked)}
               className="w-4 h-4 text-rose-600 rounded border-slate-300 focus:ring-rose-500"
             />
-            <label htmlFor="chk-emergency-vendor" className="text-xs font-bold text-slate-800">
-              Emergency Dispatch (Trigger VIP priority gate pass)
+            <label
+              htmlFor="chk-emergency-vendor"
+              className="text-xs font-bold text-slate-800"
+            >
+              Emergency Dispatch (Priority gate access)
             </label>
           </div>
 
@@ -177,19 +195,18 @@ export default function ScheduleVendorModal({
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 border border-slate-300 text-slate-700 rounded-xl text-xs font-bold"
+              className="px-4 py-2 border border-slate-300 text-slate-700 rounded-xl text-xs font-bold cursor-pointer"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="px-5 py-2 bg-teal-800 hover:bg-teal-900 text-white rounded-xl text-xs font-bold shadow-xs"
+              className="px-5 py-2 bg-teal-800 hover:bg-teal-900 text-white rounded-xl text-xs font-bold shadow-xs cursor-pointer"
             >
               Confirm Dispatch
             </button>
           </div>
         </form>
-
       </div>
     </div>
   );

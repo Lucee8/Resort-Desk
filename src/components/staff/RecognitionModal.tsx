@@ -139,7 +139,7 @@ export default function RecognitionModal({
               <p className="text-xs text-slate-700 italic max-w-sm mt-1">"{customCitation}"</p>
               <div className="mt-3 pt-3 border-t border-amber-200 w-full flex justify-between text-[11px] font-bold text-amber-900">
                 <span>Bonus Credited: ₹{bonusAmount}</span>
-                <span>Issued by: Anjali Rao (Resort Manager)</span>
+                <span>Issued by: Mykonos Cottage Management</span>
               </div>
             </div>
 
