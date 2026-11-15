@@ -1,6 +1,6 @@
 import {
-  db,
-  storage,
+  db as firestoreClientDb,
+  storage as firebaseClientStorage,
   collection,
   doc,
   getDoc,
@@ -50,7 +50,13 @@ import {
   WhatsAppTemplate,
   WhatsAppWorkflow,
 } from '../types';
-import { OperationType, handleFirestoreError, stripUndefined } from './firestoreBase';
+import {
+  OperationType,
+  handleFirestoreError,
+  requireDb,
+  requireStorage,
+  stripUndefined,
+} from './firestoreBase';
 import {
   MYKONOS_ROOM_UNITS,
   seedMykonosStarterDataset,
@@ -108,8 +114,12 @@ export function subscribeCollection<T extends { id: string }>(
   onData: (items: T[]) => void,
   onError?: (err: Error) => void
 ) {
+  if (!firestoreClientDb) {
+    onData([]);
+    return () => {};
+  }
   return onSnapshot(
-    query(collection(db, collectionName)),
+    query(collection(firestoreClientDb, collectionName)),
     (snapshot) => {
       const items = snapshot.docs.map((d) => ({
         ...(d.data() as T),
@@ -128,6 +138,7 @@ export async function upsertCollectionDoc<T extends { id: string }>(
   item: T
 ): Promise<void> {
   try {
+    const db = requireDb();
     await setDoc(doc(db, collectionName, item.id), stripUndefined(item), { merge: true });
   } catch (error) {
     handleFirestoreError(error, OperationType.WRITE, `${collectionName}/${item.id}`);
@@ -139,6 +150,7 @@ export async function deleteCollectionDoc(
   id: string
 ): Promise<void> {
   try {
+    const db = requireDb();
     await deleteDoc(doc(db, collectionName, id));
   } catch (error) {
     handleFirestoreError(error, OperationType.DELETE, `${collectionName}/${id}`);
@@ -211,8 +223,12 @@ export function subscribeBlockedDays(
   onData: (days: number[]) => void,
   onError?: (err: Error) => void
 ) {
+  if (!firestoreClientDb) {
+    onData([]);
+    return () => {};
+  }
   return onSnapshot(
-    doc(db, 'propertyCalendar', 'blockedDates'),
+    doc(firestoreClientDb, 'propertyCalendar', 'blockedDates'),
     (snap) => {
       if (snap.exists() && Array.isArray(snap.data()?.days)) {
         onData(snap.data().days as number[]);
@@ -228,6 +244,7 @@ export function subscribeBlockedDays(
 
 export async function saveBlockedDays(days: number[]): Promise<void> {
   try {
+    const db = requireDb();
     await setDoc(
       doc(db, 'propertyCalendar', 'blockedDates'),
       { days, updatedAt: new Date().toISOString() },
@@ -244,6 +261,7 @@ export async function saveBlockedDays(days: number[]): Promise<void> {
 
 export async function createOrMergeGuestCRM(newGuest: GuestCRM): Promise<GuestCRM> {
   try {
+    const db = requireDb();
     const snap = await getDocs(collection(db, 'guests'));
     const normalizedPhone = newGuest.phone.replace(/\s+/g, '');
     const match = snap.docs.find((d) => {
@@ -284,6 +302,7 @@ export async function createOrMergeGuestCRM(newGuest: GuestCRM): Promise<GuestCR
 // ============================================================
 
 export async function uploadHousekeepingPhoto(taskId: string, file: File): Promise<string> {
+  const storage = requireStorage();
   const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
   const storageRef = ref(storage, `housekeeping-photos/${taskId}/${Date.now()}_${safeName}`);
   const res = await uploadBytes(storageRef, file);
@@ -291,6 +310,7 @@ export async function uploadHousekeepingPhoto(taskId: string, file: File): Promi
 }
 
 export async function uploadMaintenancePhoto(ticketId: string, file: File): Promise<string> {
+  const storage = requireStorage();
   const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
   const storageRef = ref(storage, `maintenance-photos/${ticketId}/${Date.now()}_${safeName}`);
   const res = await uploadBytes(storageRef, file);
@@ -315,6 +335,7 @@ export async function saveHousekeepingTaskAndSyncRoom(
   rooms: RoomUnit[]
 ): Promise<void> {
   try {
+    const db = requireDb();
     const batch = writeBatch(db);
     batch.set(doc(db, 'housekeepingTasks', task.id), stripUndefined(task), { merge: true });
 
@@ -344,6 +365,7 @@ export async function saveHousekeepingTaskAndSyncRoom(
 
 export async function batchUpdateHousekeepingTasks(tasks: HousekeepingTask[]): Promise<void> {
   try {
+    const db = requireDb();
     const batch = writeBatch(db);
     for (const task of tasks) {
       batch.set(doc(db, 'housekeepingTasks', task.id), stripUndefined(task), { merge: true });
@@ -363,6 +385,7 @@ export async function saveMaintenanceTicketAtomic(
   rooms: RoomUnit[]
 ): Promise<void> {
   try {
+    const db = requireDb();
     const batch = writeBatch(db);
     batch.set(doc(db, 'maintenanceTickets', ticket.id), stripUndefined(ticket), { merge: true });
 
@@ -390,6 +413,7 @@ export async function closeMaintenanceTicketAtomic(
   updatedTechnician?: Technician
 ): Promise<void> {
   try {
+    const db = requireDb();
     const batch = writeBatch(db);
     batch.set(
       doc(db, 'maintenanceTickets', ticket.id),
@@ -439,6 +463,7 @@ export async function closeMaintenanceTicketAtomic(
 
 export async function createBillingInvoiceAtomic(invoice: BillingInvoice): Promise<void> {
   try {
+    const db = requireDb();
     const clean = stripUndefined(invoice);
     await setDoc(doc(db, 'invoices', clean.id), clean, { merge: true });
   } catch (error) {
@@ -452,6 +477,7 @@ export async function recordBillingInvoicePaymentAtomic(
   method: string,
   referenceId: string
 ): Promise<void> {
+  const db = requireDb();
   if (!Number.isFinite(amount) || amount <= 0) {
     throw new Error('Payment amount must be greater than ₹0.');
   }
@@ -584,6 +610,7 @@ export async function processBillingRefundAtomic(
   reason: string
 ): Promise<void> {
   try {
+    const db = requireDb();
     const batch = writeBatch(db);
     const todayLabel = new Date().toLocaleDateString('en-IN', {
       month: 'short',
@@ -637,8 +664,12 @@ export function subscribeBillingDoc<T>(
   fallback: T,
   onData: (val: T) => void
 ) {
+  if (!firestoreClientDb) {
+    onData(fallback);
+    return () => {};
+  }
   return onSnapshot(
-    doc(db, 'billingConfig', docId),
+    doc(firestoreClientDb, 'billingConfig', docId),
     (snap) => {
       if (snap.exists()) {
         onData(snap.data() as T);
@@ -655,6 +686,7 @@ export async function saveBillingDoc<T extends Record<string, unknown>>(
   data: T
 ): Promise<void> {
   try {
+    const db = requireDb();
     await setDoc(doc(db, 'billingConfig', docId), stripUndefined(data), { merge: true });
   } catch (error) {
     handleFirestoreError(error, OperationType.WRITE, `billingConfig/${docId}`);
@@ -669,8 +701,11 @@ export function subscribeResortSettings(
   onData: (settings: ResortDeskSettings) => void,
   onError?: (err: Error) => void
 ) {
+  if (!firestoreClientDb) {
+    return () => {};
+  }
   return onSnapshot(
-    doc(db, 'settings', 'resortDesk'),
+    doc(firestoreClientDb, 'settings', 'resortDesk'),
     (snap) => {
       if (snap.exists()) {
         const data = snap.data() as ResortDeskSettings;
@@ -690,6 +725,7 @@ export function subscribeResortSettings(
 
 export async function saveResortSettings(settings: ResortDeskSettings): Promise<void> {
   try {
+    const db = requireDb();
     const clean = stripUndefined(settings);
     await setDoc(doc(db, 'settings', 'resortDesk'), clean, { merge: true });
     try {
@@ -705,8 +741,12 @@ export async function saveResortSettings(settings: ResortDeskSettings): Promise<
 export function subscribeNotificationsReadState(
   onData: (readIds: string[]) => void
 ) {
+  if (!firestoreClientDb) {
+    onData([]);
+    return () => {};
+  }
   return onSnapshot(
-    doc(db, 'notifications', 'readState'),
+    doc(firestoreClientDb, 'notifications', 'readState'),
     (snap) => {
       if (snap.exists() && Array.isArray(snap.data()?.readIds)) {
         onData(snap.data().readIds as string[]);
@@ -720,6 +760,7 @@ export function subscribeNotificationsReadState(
 
 export async function markNotificationsReadInFirestore(readIds: string[]): Promise<void> {
   try {
+    const db = requireDb();
     await setDoc(
       doc(db, 'notifications', 'readState'),
       { readIds, updatedAt: new Date().toISOString() },
@@ -733,8 +774,11 @@ export async function markNotificationsReadInFirestore(readIds: string[]): Promi
 export function subscribeGoogleReviewsConfig(
   onData: (config: GoogleReviewsIntegrationConfig) => void
 ) {
+  if (!firestoreClientDb) {
+    return () => {};
+  }
   return onSnapshot(
-    doc(db, 'reviewConfig', 'google'),
+    doc(firestoreClientDb, 'reviewConfig', 'google'),
     (snap) => {
       if (snap.exists()) {
         onData(snap.data() as GoogleReviewsIntegrationConfig);
@@ -748,6 +792,7 @@ export async function saveGoogleReviewsConfig(
   config: GoogleReviewsIntegrationConfig
 ): Promise<void> {
   try {
+    const db = requireDb();
     await setDoc(doc(db, 'reviewConfig', 'google'), stripUndefined(config), { merge: true });
   } catch (error) {
     handleFirestoreError(error, OperationType.WRITE, 'reviewConfig/google');
@@ -759,6 +804,7 @@ export async function saveGoogleReviewsConfig(
 // ============================================================
 
 export async function seedAllMykonosCollections(): Promise<void> {
+  const db = requireDb();
   await seedMykonosStarterDataset();
 
   const commits: Promise<void>[] = [];
@@ -842,6 +888,7 @@ export async function seedAllMykonosCollections(): Promise<void> {
  * and Firestore is writable, callers can inspect before seeding.
  */
 export async function checkFirestoreRoomsEmpty(): Promise<boolean> {
+  const db = requireDb();
   const snap = await getDocs(collection(db, 'rooms'));
   return snap.empty;
 }

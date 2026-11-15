@@ -1,6 +1,6 @@
 import {
-  db,
-  storage,
+  db as firestoreClientDb,
+  storage as firebaseClientStorage,
   collection,
   doc,
   getDoc,
@@ -27,6 +27,8 @@ import {
 import {
   OperationType,
   handleFirestoreError,
+  requireDb,
+  requireStorage,
   stripUndefined,
 } from './firestoreBase';
 import {
@@ -161,7 +163,11 @@ export function subscribeBookings(
   onData: (bookings: Booking[]) => void,
   onError: (err: Error) => void
 ) {
-  const q = query(collection(db, 'bookings'));
+  if (!firestoreClientDb) {
+    onData([]);
+    return () => {};
+  }
+  const q = query(collection(firestoreClientDb, 'bookings'));
   return onSnapshot(
     q,
     (snapshot) => {
@@ -189,7 +195,11 @@ export function subscribeRooms(
   onData: (rooms: RoomUnit[]) => void,
   onError: (err: Error) => void
 ) {
-  const q = query(collection(db, 'rooms'));
+  if (!firestoreClientDb) {
+    onData([]);
+    return () => {};
+  }
+  const q = query(collection(firestoreClientDb, 'rooms'));
   return onSnapshot(
     q,
     (snapshot) => {
@@ -210,7 +220,11 @@ export function subscribeGuests(
   onData: (guests: GuestCRM[]) => void,
   onError: (err: Error) => void
 ) {
-  const q = query(collection(db, 'guests'));
+  if (!firestoreClientDb) {
+    onData([]);
+    return () => {};
+  }
+  const q = query(collection(firestoreClientDb, 'guests'));
   return onSnapshot(
     q,
     (snapshot) => {
@@ -227,6 +241,7 @@ export function subscribeGuests(
 }
 
 export async function initializeRoomsCatalogInFirestore(): Promise<void> {
+  const db = requireDb();
   const batch = writeBatch(db);
   for (const room of MYKONOS_ROOM_UNITS) {
     batch.set(doc(db, 'rooms', room.id), room, { merge: true });
@@ -725,6 +740,7 @@ export function buildSampleMykonosBookings(): Booking[] {
 
 export async function seedMykonosStarterDataset(): Promise<void> {
   try {
+    const db = requireDb();
     const batch = writeBatch(db);
     for (const room of MYKONOS_ROOM_UNITS) {
       batch.set(doc(db, 'rooms', room.id), stripUndefined(room), { merge: true });
@@ -819,6 +835,7 @@ export async function createReservationAtomic(
   newBooking: Booking,
   room: RoomUnit
 ): Promise<Booking> {
+  const db = requireDb();
   const { checkInISO, checkOutISO } = resolveBookingDatesISO(newBooking);
   const nights = diffNights(checkInISO, checkOutISO);
   if (nights <= 0) {
@@ -1003,6 +1020,7 @@ export async function editReservationAtomic(
   updatedBooking: Booking,
   room: RoomUnit
 ): Promise<Booking> {
+  const db = requireDb();
   const { checkInISO, checkOutISO } = resolveBookingDatesISO(updatedBooking);
   const nights = diffNights(checkInISO, checkOutISO);
   if (nights <= 0) {
@@ -1095,6 +1113,7 @@ export async function editReservationAtomic(
 
 export async function cancelBookingAtomic(booking: Booking): Promise<void> {
   try {
+    const db = requireDb();
     const batch = writeBatch(db);
     batch.update(doc(db, 'bookings', booking.id), {
       bookingStatus: 'Cancelled',
@@ -1122,6 +1141,7 @@ export async function cancelBookingAtomic(booking: Booking): Promise<void> {
 
 export async function checkInBookingInFirestore(booking: Booking): Promise<void> {
   try {
+    const db = requireDb();
     const batch = writeBatch(db);
     batch.update(doc(db, 'bookings', booking.id), {
       bookingStatus: 'Checked-in',
@@ -1142,6 +1162,7 @@ export async function checkInBookingInFirestore(booking: Booking): Promise<void>
 
 export async function checkOutBookingInFirestore(booking: Booking): Promise<void> {
   try {
+    const db = requireDb();
     const batch = writeBatch(db);
     batch.update(doc(db, 'bookings', booking.id), {
       bookingStatus: 'Checked-out',
@@ -1183,6 +1204,7 @@ export async function moveBookingRoomAtomic(
   booking: Booking,
   targetRoom: RoomUnit
 ): Promise<void> {
+  const db = requireDb();
   const { checkInISO, checkOutISO } = resolveBookingDatesISO(booking);
   const targetSnap = await getDocs(
     query(collection(db, 'bookings'), where('roomId', '==', targetRoom.id))
@@ -1235,6 +1257,7 @@ export async function recordBookingPaymentAtomic(
   referenceId: string,
   recordedBy = 'Front Desk'
 ): Promise<void> {
+  const db = requireDb();
   if (!Number.isFinite(amount) || amount <= 0) {
     throw new Error('Payment amount must be greater than ₹0.');
   }
@@ -1323,6 +1346,7 @@ export async function updateBookingFieldsInFirestore(
   patch: Partial<Booking>
 ): Promise<void> {
   try {
+    const db = requireDb();
     await updateDoc(doc(db, 'bookings', bookingId), stripUndefined({
       ...patch,
       updatedAt: new Date().toISOString(),
@@ -1338,6 +1362,7 @@ export async function updateRoomStatusInFirestore(
   maintenanceNote?: string
 ): Promise<void> {
   try {
+    const db = requireDb();
     await setDoc(
       doc(db, 'rooms', roomId),
       stripUndefined({ status, maintenanceNote: maintenanceNote || '' }),
@@ -1349,6 +1374,7 @@ export async function updateRoomStatusInFirestore(
 }
 
 export async function uploadGuestIdDocument(guestKey: string, file: File): Promise<string> {
+  const storage = requireStorage();
   const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
   const storageRef = ref(storage, `guest-ids/${guestKey}/${Date.now()}_${safeName}`);
   const result = await uploadBytes(storageRef, file);

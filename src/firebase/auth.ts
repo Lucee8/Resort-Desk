@@ -1,41 +1,72 @@
-import { 
-  getAuth, 
-  signInWithEmailAndPassword, 
-  createUserWithEmailAndPassword, 
-  signOut as firebaseSignOut, 
-  sendPasswordResetEmail, 
+import {
+  getAuth,
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  signOut as firebaseSignOut,
+  sendPasswordResetEmail,
   updateProfile,
   onAuthStateChanged,
   User,
   Auth,
-  UserCredential
+  UserCredential,
 } from 'firebase/auth';
-import app from './config';
+import app, { firebaseInitError, isFirebaseConfigured } from './config';
+
+let authInstance: Auth | null = null;
+let authInitError: string | null = firebaseInitError;
+
+if (app && isFirebaseConfigured()) {
+  try {
+    authInstance = getAuth(app);
+  } catch (err) {
+    authInitError =
+      err instanceof Error
+        ? err.message
+        : 'Firebase Authentication failed to initialize.';
+    authInstance = null;
+    console.error('[ResortDesk Firebase Auth Error]', authInitError);
+  }
+}
 
 /**
- * Firebase Authentication instance
+ * Firebase Authentication instance (null when Firebase config is missing/invalid)
  */
-export const auth: Auth = getAuth(app);
+export const auth: Auth | null = authInstance;
+export { authInitError };
+
+function assertAuthReady(): Auth {
+  if (!auth) {
+    throw new Error(
+      authInitError ||
+        'Firebase Authentication is not configured. Ensure VITE_FIREBASE_API_KEY and related VITE_FIREBASE_* variables are set before building.'
+    );
+  }
+  return auth;
+}
 
 /**
  * Sign in an existing user with email and password
  */
 export const signInWithEmail = async (
-  email: string, 
+  email: string,
   pass: string
 ): Promise<UserCredential> => {
-  return signInWithEmailAndPassword(auth, email.trim(), pass);
+  return signInWithEmailAndPassword(assertAuthReady(), email.trim(), pass);
 };
 
 /**
  * Create a new user with email and password
  */
 export const signUpWithEmail = async (
-  email: string, 
-  pass: string, 
+  email: string,
+  pass: string,
   displayName?: string
 ): Promise<UserCredential> => {
-  const credential = await createUserWithEmailAndPassword(auth, email.trim(), pass);
+  const credential = await createUserWithEmailAndPassword(
+    assertAuthReady(),
+    email.trim(),
+    pass
+  );
   if (displayName && credential.user) {
     await updateProfile(credential.user, { displayName });
   }
@@ -46,22 +77,26 @@ export const signUpWithEmail = async (
  * Sign out the currently authenticated user
  */
 export const logOut = async (): Promise<void> => {
-  return firebaseSignOut(auth);
+  return firebaseSignOut(assertAuthReady());
 };
 
 /**
  * Send a password reset email
  */
 export const resetUserPassword = async (email: string): Promise<void> => {
-  return sendPasswordResetEmail(auth, email.trim());
+  return sendPasswordResetEmail(assertAuthReady(), email.trim());
 };
 
 /**
- * Subscribe to authentication state changes
+ * Subscribe to authentication state changes safely even when Firebase is unconfigured
  */
 export const subscribeToAuthChanges = (
   callback: (user: User | null) => void
 ) => {
+  if (!auth) {
+    queueMicrotask(() => callback(null));
+    return () => {};
+  }
   return onAuthStateChanged(auth, callback);
 };
 
@@ -72,7 +107,7 @@ export {
   firebaseSignOut as signOut,
   sendPasswordResetEmail,
   updateProfile,
-  onAuthStateChanged
+  onAuthStateChanged,
 };
 export type { User, UserCredential, Auth };
 

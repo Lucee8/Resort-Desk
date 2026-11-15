@@ -15,6 +15,8 @@ import { useAuth } from '../../context/AuthContext';
 export default function StaffAuthModal() {
   const {
     user,
+    firebaseConfigured,
+    configError,
     firestoreStatus,
     firestoreMessage,
     signIn,
@@ -40,6 +42,14 @@ export default function StaffAuthModal() {
     e.preventDefault();
     setErrorMsg(null);
     setInfoMsg(null);
+
+    if (!firebaseConfigured) {
+      setErrorMsg(
+        configError ||
+          'Firebase configuration is missing from this build. Set VITE_FIREBASE_* variables and redeploy.'
+      );
+      return;
+    }
 
     if (!email.trim()) {
       setErrorMsg('Please enter your staff email address.');
@@ -100,24 +110,31 @@ export default function StaffAuthModal() {
           {/* Firestore connection summary */}
           <div
             className={`p-3 rounded-xl border text-xs flex items-start justify-between gap-2 ${
-              firestoreStatus === 'connected'
-                ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
-                : 'bg-amber-50 border-amber-200 text-amber-900'
+              !firebaseConfigured
+                ? 'bg-rose-50 border-rose-200 text-rose-900'
+                : firestoreStatus === 'connected'
+                  ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                  : 'bg-amber-50 border-amber-200 text-amber-900'
             }`}
           >
             <div className="min-w-0">
               <p className="font-bold">
-                Firestore Status:{' '}
-                {firestoreStatus === 'connected'
-                  ? 'Connected'
-                  : firestoreStatus === 'permission-denied'
-                    ? 'Permission Denied (Rules / Auth Required)'
-                    : firestoreStatus === 'checking'
-                      ? 'Checking...'
-                      : 'Disconnected'}
+                {!firebaseConfigured
+                  ? 'Firebase Environment Configuration Missing'
+                  : `Firestore Status: ${
+                      firestoreStatus === 'connected'
+                        ? 'Connected'
+                        : firestoreStatus === 'permission-denied'
+                          ? 'Permission Denied (Rules / Auth Required)'
+                          : firestoreStatus === 'checking'
+                            ? 'Checking...'
+                            : 'Disconnected'
+                    }`}
               </p>
-              {firestoreMessage && firestoreStatus !== 'connected' && (
-                <p className="text-[11px] opacity-85 mt-0.5 break-words">{firestoreMessage}</p>
+              {(configError || (firestoreMessage && firestoreStatus !== 'connected')) && (
+                <p className="text-[11px] opacity-85 mt-0.5 break-words">
+                  {configError || firestoreMessage}
+                </p>
               )}
             </div>
             <button

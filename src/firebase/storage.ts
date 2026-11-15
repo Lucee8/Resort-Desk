@@ -1,23 +1,33 @@
-import { 
-  getStorage, 
+import {
+  getStorage,
   FirebaseStorage,
-  ref, 
-  uploadBytes, 
-  uploadBytesResumable, 
-  getDownloadURL, 
-  deleteObject, 
+  ref,
+  uploadBytes,
+  uploadBytesResumable,
+  getDownloadURL,
+  deleteObject,
   listAll,
   StorageReference,
   UploadResult,
-  UploadTaskSnapshot
+  UploadTaskSnapshot,
 } from 'firebase/storage';
-import app from './config';
+import app, { isFirebaseConfigured } from './config';
+
+let storageInstance: FirebaseStorage | null = null;
+if (app && isFirebaseConfigured()) {
+  try {
+    storageInstance = getStorage(app);
+  } catch (err) {
+    console.error('[ResortDesk Storage Init Error]', err);
+    storageInstance = null;
+  }
+}
 
 /**
- * Firebase Storage instance for resortdesk-mykonos.
- * Handles room photos, inspection audits, and guest documents.
+ * Firebase Storage instance for resortdesk-mykonos using the shared app singleton.
+ * Null when Firebase configuration is missing/invalid.
  */
-export const storage: FirebaseStorage = getStorage(app);
+export const storage: FirebaseStorage | null = storageInstance;
 
 // Re-export modular Firebase Storage functions and types
 export {
@@ -26,14 +36,14 @@ export {
   uploadBytesResumable,
   getDownloadURL,
   deleteObject,
-  listAll
+  listAll,
 };
 
 export type {
   FirebaseStorage,
   StorageReference,
   UploadResult,
-  UploadTaskSnapshot
+  UploadTaskSnapshot,
 };
 
 export default storage;

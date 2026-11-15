@@ -5,6 +5,7 @@ import {
   collection,
   query,
   onSnapshot,
+  firebaseInitError,
 } from '../firebase';
 import { EmailLogItem } from '../types';
 
@@ -87,6 +88,13 @@ export async function sendWhatsAppViaCloudAPI(payload: {
   workflowName?: string;
   nodeTitle?: string;
 }): Promise<CloudDispatchResponse> {
+  if (!functions) {
+    return {
+      ok: false,
+      status: 'needs-credentials',
+      message: firebaseInitError || 'Firebase is not configured in this build.',
+    };
+  }
   try {
     const callable = httpsCallable<typeof payload, {
       logId: string;
@@ -129,6 +137,14 @@ export async function retryFailedWhatsAppViaCloud(): Promise<{
   succeeded: number;
   message: string;
 }> {
+  if (!functions) {
+    return {
+      ok: false,
+      attempted: 0,
+      succeeded: 0,
+      message: firebaseInitError || 'Firebase is not configured in this build.',
+    };
+  }
   try {
     const callable = httpsCallable<Record<string, never>, { attempted: number; succeeded: number }>(
       functions,
@@ -184,6 +200,13 @@ export async function sendEmailViaCloudFunction(payload: {
   cancellationReason?: string;
   idempotencyKey?: string;
 }): Promise<CloudDispatchResponse> {
+  if (!functions) {
+    return {
+      ok: false,
+      status: 'needs-credentials',
+      message: firebaseInitError || 'Firebase is not configured in this build.',
+    };
+  }
   try {
     const callable = httpsCallable<typeof payload, {
       logId: string;
@@ -227,6 +250,14 @@ export async function retryFailedEmailsViaCloud(): Promise<{
   succeeded: number;
   message: string;
 }> {
+  if (!functions) {
+    return {
+      ok: false,
+      attempted: 0,
+      succeeded: 0,
+      message: firebaseInitError || 'Firebase is not configured in this build.',
+    };
+  }
   try {
     const callable = httpsCallable<Record<string, never>, { attempted: number; succeeded: number }>(
       functions,
@@ -254,6 +285,10 @@ export function subscribeEmailLogs(
   onData: (logs: EmailLogItem[]) => void,
   onError?: (err: Error) => void
 ) {
+  if (!db) {
+    onData([]);
+    return () => {};
+  }
   return onSnapshot(
     query(collection(db, 'emailLogs')),
     (snap) => {

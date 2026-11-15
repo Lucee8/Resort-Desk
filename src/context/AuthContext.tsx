@@ -8,6 +8,11 @@ import {
   resetUserPassword,
 } from '../firebase/auth';
 import {
+  firebaseConfigDiagnostics,
+  firebaseInitError,
+  isFirebaseConfigured,
+} from '../firebase/config';
+import {
   FirestoreConnectionStatus,
   testFirestoreConnection,
 } from '../services/firestoreBase';
@@ -15,6 +20,9 @@ import {
 interface AuthContextValue {
   user: User | null;
   authLoading: boolean;
+  firebaseConfigured: boolean;
+  configError: string | null;
+  missingConfigKeys: string[];
   firestoreStatus: FirestoreConnectionStatus;
   firestoreMessage: string | null;
   recheckFirestore: () => Promise<FirestoreConnectionStatus>;
@@ -30,14 +38,23 @@ interface AuthContextValue {
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const configured = isFirebaseConfigured();
   const [user, setUser] = useState<User | null>(null);
-  const [authLoading, setAuthLoading] = useState(true);
-  const [firestoreStatus, setFirestoreStatus] =
-    useState<FirestoreConnectionStatus>('checking');
-  const [firestoreMessage, setFirestoreMessage] = useState<string | null>(null);
+  const [authLoading, setAuthLoading] = useState(configured);
+  const [firestoreStatus, setFirestoreStatus] = useState<FirestoreConnectionStatus>(
+    configured ? 'checking' : 'unconfigured'
+  );
+  const [firestoreMessage, setFirestoreMessage] = useState<string | null>(
+    configured ? null : firebaseInitError
+  );
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
 
   const recheckFirestore = useCallback(async () => {
+    if (!isFirebaseConfigured()) {
+      setFirestoreStatus('unconfigured');
+      setFirestoreMessage(firebaseInitError);
+      return 'unconfigured';
+    }
     setFirestoreStatus('checking');
     const result = await testFirestoreConnection();
     setFirestoreStatus(result.status);
@@ -46,13 +63,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
+    if (!configured) {
+      setAuthLoading(false);
+      setFirestoreStatus('unconfigured');
+      setFirestoreMessage(firebaseInitError);
+      return;
+    }
+
     const unsubscribe = subscribeToAuthChanges((nextUser) => {
       setUser(nextUser);
       setAuthLoading(false);
       void recheckFirestore();
     });
     return () => unsubscribe();
-  }, [recheckFirestore]);
+  }, [configured, recheckFirestore]);
 
   const signIn = async (email: string, password: string) => {
     await signInWithEmail(email, password);
@@ -78,6 +102,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       value={{
         user,
         authLoading,
+        firebaseConfigured: configured,
+        configError: firebaseInitError,
+        missingConfigKeys: [
+          ...firebaseConfigDiagnostics.missingKeys,
+          ...firebaseConfigDiagnostics.invalidKeys,
+        ],
         firestoreStatus,
         firestoreMessage,
         recheckFirestore,

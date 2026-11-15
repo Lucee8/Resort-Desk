@@ -1,41 +1,52 @@
-import { 
-  getFirestore, 
+import {
+  getFirestore,
   Firestore,
-  collection, 
-  doc, 
-  getDoc, 
+  collection,
+  doc,
+  getDoc,
   getDocFromServer,
-  getDocs, 
-  setDoc, 
-  addDoc, 
-  updateDoc, 
-  deleteDoc, 
-  onSnapshot, 
-  query, 
-  where, 
-  orderBy, 
-  limit, 
-  startAfter, 
-  writeBatch, 
-  runTransaction, 
-  serverTimestamp, 
+  getDocs,
+  setDoc,
+  addDoc,
+  updateDoc,
+  deleteDoc,
+  onSnapshot,
+  query,
+  where,
+  orderBy,
+  limit,
+  startAfter,
+  writeBatch,
+  runTransaction,
+  serverTimestamp,
   Timestamp,
   CollectionReference,
   DocumentReference,
   QueryConstraint,
   DocumentData,
   QuerySnapshot,
-  DocumentSnapshot
+  DocumentSnapshot,
 } from 'firebase/firestore';
-import app from './config';
+import app, { isFirebaseConfigured } from './config';
+
+let dbInstance: Firestore | null = null;
+if (app && isFirebaseConfigured()) {
+  try {
+    dbInstance = getFirestore(app);
+  } catch (err) {
+    console.error('[ResortDesk Firestore Init Error]', err);
+    dbInstance = null;
+  }
+}
 
 /**
- * Cloud Firestore instance initialized with the regional database configuration.
- * (Mumbai asia-south1 region provisioned for resortdesk-mykonos)
+ * Cloud Firestore instance initialized from the shared Firebase app singleton
+ * (Mumbai asia-south1 region provisioned for resortdesk-mykonos).
+ * Null when Firebase configuration is missing/invalid.
  */
-export const db: Firestore = getFirestore(app);
+export const db: Firestore | null = dbInstance;
 
-// Re-export modular Firestore functions and types for future service layers
+// Re-export modular Firestore functions and types
 export {
   collection,
   doc,
@@ -55,7 +66,7 @@ export {
   writeBatch,
   runTransaction,
   serverTimestamp,
-  Timestamp
+  Timestamp,
 };
 
 export type {
@@ -65,7 +76,7 @@ export type {
   QueryConstraint,
   DocumentData,
   QuerySnapshot,
-  DocumentSnapshot
+  DocumentSnapshot,
 };
 
 export default db;

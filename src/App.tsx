@@ -99,7 +99,15 @@ import {
 } from './types';
 
 export default function App() {
-  const { user, firestoreStatus, firestoreMessage, openAuthModal, recheckFirestore } = useAuth();
+  const {
+    user,
+    firebaseConfigured,
+    configError,
+    firestoreStatus,
+    firestoreMessage,
+    openAuthModal,
+    recheckFirestore,
+  } = useAuth();
 
   // Navigation & mobile drawer state
   const [activeTab, setActiveTab] = useState<string>('dashboard');
@@ -238,6 +246,10 @@ export default function App() {
 
   // Seed Mykonos starter dataset on explicit click
   const handleSeedStarterDataset = async () => {
+    if (!firebaseConfigured) {
+      triggerToast('Configure VITE_FIREBASE_* environment variables and rebuild first.');
+      return;
+    }
     setSeeding(true);
     try {
       await seedAllMykonosCollections();
@@ -851,8 +863,32 @@ export default function App() {
 
         {/* Dynamic Navigation Content */}
         <div className="flex-1 overflow-y-auto overflow-x-hidden p-4 sm:p-6 lg:p-8">
-          {/* Global Firestore Permission / Error Banners */}
-          {firestoreStatus === 'permission-denied' && (
+          {/* Global Firebase Configuration / Permission / Error Banners */}
+          {!firebaseConfigured && (
+            <div className="max-w-7xl mx-auto mb-5 bg-rose-50 border border-rose-200 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex items-start gap-2.5">
+                <AlertCircle className="w-5 h-5 text-rose-700 shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-xs font-bold text-rose-950">
+                    Firebase Configuration Missing or Incomplete (resortdesk-mykonos)
+                  </p>
+                  <p className="text-[11px] text-rose-800 mt-0.5">
+                    {configError ||
+                      'VITE_FIREBASE_API_KEY was not provided when building this bundle. Add all VITE_FIREBASE_* variables in your hosting build environment and redeploy.'}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={openAuthModal}
+                className="px-4 py-2 bg-rose-700 hover:bg-rose-800 text-white text-xs font-bold rounded-xl shrink-0 cursor-pointer"
+              >
+                View Diagnostics
+              </button>
+            </div>
+          )}
+
+          {firebaseConfigured && firestoreStatus === 'permission-denied' && (
             <div className="max-w-7xl mx-auto mb-5 bg-amber-50 border border-amber-200 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div className="flex items-start gap-2.5">
                 <ShieldAlert className="w-5 h-5 text-amber-700 shrink-0 mt-0.5" />
