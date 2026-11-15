@@ -3,6 +3,7 @@ import {
   storage,
   collection,
   doc,
+  getDoc,
   getDocs,
   setDoc,
   updateDoc,
@@ -1097,10 +1098,21 @@ export async function cancelBookingAtomic(booking: Booking): Promise<void> {
     const batch = writeBatch(db);
     batch.update(doc(db, 'bookings', booking.id), {
       bookingStatus: 'Cancelled',
+      balanceDue: 0,
       updatedAt: new Date().toISOString(),
     });
     if (booking.roomId && booking.bookingStatus === 'Checked-in') {
       batch.set(doc(db, 'rooms', booking.roomId), { status: 'Available' }, { merge: true });
+    }
+    if (booking.invoice?.invoiceNumber) {
+      const invoiceDocId = booking.invoice.invoiceNumber.replace(/[^\w-]/g, '_');
+      const invRef = doc(db, 'invoices', invoiceDocId);
+      const invSnap = await getDoc(invRef);
+      if (invSnap.exists()) {
+        batch.update(invRef, {
+          dueAmount: 0,
+        });
+      }
     }
     await batch.commit();
   } catch (error) {

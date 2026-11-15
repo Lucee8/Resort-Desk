@@ -89,13 +89,10 @@ service cloud.firestore {
     match /staffProfiles/{uid} {
       allow get: if isSignedIn() && (request.auth.uid == uid || isManagerOrAdmin());
       allow list: if isManagerOrAdmin();
-      allow create: if isSignedIn()
-        && request.auth.uid == uid
+      allow create: if isManagerOrAdmin()
         && isValidId(uid)
         && request.resource.data.keys().hasAll(['uid', 'email', 'role'])
-        && request.resource.data.uid == request.auth.uid
-        && request.resource.data.role in ['Receptionist', 'Staff']
-        && request.resource.data.disabled != true;
+        && request.resource.data.uid == uid;
       allow update: if isValidId(uid) && (
         isManagerOrAdmin() ||
         (

@@ -174,10 +174,10 @@ export default function WhatsAppKPIHeader({
           </div>
           <div className="flex items-baseline gap-2">
             <span className="text-2xl font-bold text-slate-900 font-sans tracking-tight">
-              {kpiData.messagesSent.toLocaleString()}
+              {(kpiData?.messagesSent ?? 0).toLocaleString()}
             </span>
             <span className="inline-flex items-center gap-0.5 text-[11px] font-semibold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded-md">
-              ↑ {kpiData.messagesSentGrowth}%
+              ↑ {kpiData?.messagesSentGrowth ?? 0}%
             </span>
           </div>
         </div>
@@ -192,10 +192,10 @@ export default function WhatsAppKPIHeader({
           </div>
           <div className="flex items-baseline gap-2">
             <span className="text-2xl font-bold text-slate-900 font-sans tracking-tight">
-              {kpiData.deliveryRate}%
+              {kpiData?.deliveryRate ?? 0}%
             </span>
             <span className="inline-flex items-center gap-0.5 text-[11px] font-semibold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded-md">
-              ↑ {kpiData.deliveryRateGrowth}%
+              ↑ {kpiData?.deliveryRateGrowth ?? 0}%
             </span>
           </div>
         </div>
@@ -210,10 +210,10 @@ export default function WhatsAppKPIHeader({
           </div>
           <div className="flex items-baseline gap-2">
             <span className="text-2xl font-bold text-slate-900 font-sans tracking-tight">
-              {kpiData.readRate}%
+              {kpiData?.readRate ?? 0}%
             </span>
             <span className="inline-flex items-center gap-0.5 text-[11px] font-semibold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded-md">
-              ↑ {kpiData.readRateGrowth}%
+              ↑ {kpiData?.readRateGrowth ?? 0}%
             </span>
           </div>
         </div>
@@ -228,7 +228,7 @@ export default function WhatsAppKPIHeader({
           </div>
           <div className="flex items-baseline gap-2">
             <span className="text-2xl font-bold text-slate-900 font-sans tracking-tight">
-              {kpiData.responseRate}%
+              {kpiData?.responseRate ?? 0}%
             </span>
             <span className="inline-flex items-center text-[11px] font-medium text-slate-400 bg-slate-200/60 px-1.5 py-0.5 rounded-md">
               -
@@ -248,7 +248,7 @@ export default function WhatsAppKPIHeader({
           </div>
           <div className="flex items-baseline justify-between mt-2">
             <span className="text-3xl font-bold text-white font-sans tracking-tight">
-              {kpiData.activeAutomations}
+              {kpiData?.activeAutomations ?? 0}
             </span>
             <span className="text-xs font-medium text-emerald-200/90 flex items-center gap-1 group-hover:translate-x-0.5 transition-transform">
               View All <ArrowRight className="w-3 h-3" />

@@ -27,6 +27,25 @@ export default function AIDemandForecastingSection({
 
   const selectedItem = items.find(i => i.id === selectedItemId) || items[0];
 
+  if (!selectedItem) {
+    return (
+      <div
+        id="ai-demand-forecasting-container"
+        className="bg-white rounded-3xl p-6 border border-slate-200/80 shadow-sm text-center space-y-2"
+      >
+        <div className="w-10 h-10 rounded-2xl bg-teal-50 text-teal-800 flex items-center justify-center border border-teal-100 mx-auto">
+          <Sparkles className="w-5 h-5 text-teal-700" />
+        </div>
+        <h3 className="text-base font-serif font-bold text-slate-900">
+          AI Demand Forecasting &amp; Restocking Engine
+        </h3>
+        <p className="text-xs text-slate-500 max-w-md mx-auto">
+          Add or sync inventory items in Firestore to compute depletion forecasts and automated purchase order recommendations.
+        </p>
+      </div>
+    );
+  }
+
   // Dynamic forecast calculations based on the selected item
   const multiplier = forecastHorizon === '30days' ? 1 : 1.8;
   const expectedConsumption = Math.round(selectedItem.consumptionRateWeekly * 4.3 * multiplier);

@@ -449,7 +449,7 @@ export const whatsappWebhook = onRequest(
 
     const appSecret = WHATSAPP_APP_SECRET.value().trim();
     const signature = req.header('x-hub-signature-256');
-    if (appSecret && !verifyMetaSignature(req.rawBody, signature, appSecret)) {
+    if (!appSecret || !verifyMetaSignature(req.rawBody, signature, appSecret)) {
       res.status(401).send('Invalid signature');
       return;
     }

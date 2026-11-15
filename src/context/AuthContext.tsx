@@ -11,7 +11,6 @@ import {
   FirestoreConnectionStatus,
   testFirestoreConnection,
 } from '../services/firestoreBase';
-import { doc, getDoc, setDoc, db } from '../firebase';
 
 interface AuthContextValue {
   user: User | null;
@@ -50,30 +49,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const unsubscribe = subscribeToAuthChanges((nextUser) => {
       setUser(nextUser);
       setAuthLoading(false);
-      if (nextUser) {
-        void (async () => {
-          try {
-            const profileRef = doc(db, 'staffProfiles', nextUser.uid);
-            const snap = await getDoc(profileRef);
-            if (!snap.exists()) {
-              await setDoc(profileRef, {
-                uid: nextUser.uid,
-                email: nextUser.email || '',
-                displayName: nextUser.displayName || 'Resort Staff',
-                role: 'Receptionist',
-                disabled: false,
-                createdAt: new Date().toISOString(),
-              });
-            }
-          } catch {
-            // Non-blocking: existing rules or admin profile may handle access
-          } finally {
-            void recheckFirestore();
-          }
-        })();
-      } else {
-        void recheckFirestore();
-      }
+      void recheckFirestore();
     });
     return () => unsubscribe();
   }, [recheckFirestore]);

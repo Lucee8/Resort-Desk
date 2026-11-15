@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { X, MessageSquare, ExternalLink } from 'lucide-react';
+import { X, MessageSquare, ExternalLink, Send, Loader2, AlertCircle, CheckCircle2 } from 'lucide-react';
 import BillingHeader from './BillingHeader';
 import BillingKPICards from './BillingKPICards';
 import RevenueBarChart from './RevenueBarChart';
@@ -43,6 +43,10 @@ import {
   getTodayISO,
   resolveBookingDatesISO,
 } from '../../utils/bookingUtils';
+import {
+  CloudDispatchResponse,
+  sendWhatsAppViaCloudAPI,
+} from '../../services/messagingService';
 
 interface BillingViewProps {
   invoices: BillingInvoice[];
@@ -106,6 +110,8 @@ export default function BillingView({
   const [isSettlementModalOpen, setIsSettlementModalOpen] = useState(false);
   const [isAllInvoicesModalOpen, setIsAllInvoicesModalOpen] = useState(false);
   const [whatsappDispatchInvoice, setWhatsappDispatchInvoice] = useState<BillingInvoice | null>(null);
+  const [waCloudSending, setWaCloudSending] = useState(false);
+  const [waCloudStatus, setWaCloudStatus] = useState<CloudDispatchResponse | null>(null);
 
   // Derive real unbilled stays from active Firestore bookings lacking a matching invoice
   const unbilledStays: UnbilledStayItem[] = useMemo(() => {
@@ -269,6 +275,7 @@ export default function BillingView({
   };
 
   const handleSendWhatsApp = (invoice: BillingInvoice) => {
+    setWaCloudStatus(null);
     setWhatsappDispatchInvoice(invoice);
   };
 
@@ -593,7 +600,7 @@ export default function BillingView({
         gstin={gstinDisplay}
       />
 
-      {/* Real WhatsApp Dispatch Modal with wa.me anchor (no fake dispatch toast) */}
+      {/* WhatsApp Dispatch Modal: Cloud API + wa.me fallback */}
       {whatsappDispatchInvoice && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-3xl border border-slate-200 shadow-2xl max-w-md w-full overflow-hidden">
@@ -610,10 +617,64 @@ export default function BillingView({
                 <X className="w-4 h-4" />
               </button>
             </div>
-            <div className="p-5 flex flex-col gap-4 text-xs text-slate-700">
+            <div className="p-5 flex flex-col gap-3.5 text-xs text-slate-700">
+              {waCloudStatus && (
+                <div
+                  className={`p-3 rounded-xl border flex items-start gap-2 ${
+                    waCloudStatus.ok
+                      ? 'bg-emerald-50 border-emerald-200 text-emerald-900'
+                      : 'bg-amber-50 border-amber-200 text-amber-900'
+                  }`}
+                >
+                  {waCloudStatus.ok ? (
+                    <CheckCircle2 className="w-4 h-4 text-emerald-700 shrink-0 mt-0.5" />
+                  ) : (
+                    <AlertCircle className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
+                  )}
+                  <span>{waCloudStatus.message}</span>
+                </div>
+              )}
               <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl whitespace-pre-line font-sans text-slate-700 leading-relaxed">
                 {whatsappMessageText}
               </div>
+              <button
+                type="button"
+                disabled={waCloudSending || !whatsappDispatchInvoice.guestPhone}
+                onClick={async () => {
+                  setWaCloudSending(true);
+                  const res = await sendWhatsAppViaCloudAPI({
+                    messageType:
+                      whatsappDispatchInvoice.dueAmount > 0
+                        ? 'payment_reminder'
+                        : 'payment_confirmation',
+                    guestName: whatsappDispatchInvoice.guestName,
+                    guestPhone: whatsappDispatchInvoice.guestPhone || '',
+                    roomNumber: whatsappDispatchInvoice.roomNumber,
+                    bookingId: whatsappDispatchInvoice.bookingId,
+                    invoiceNumber: whatsappDispatchInvoice.invoiceNumber,
+                    templateParams: [
+                      whatsappDispatchInvoice.guestName,
+                      whatsappDispatchInvoice.invoiceNumber,
+                      `INR ${whatsappDispatchInvoice.dueAmount > 0 ? whatsappDispatchInvoice.dueAmount : whatsappDispatchInvoice.paidAmount}`,
+                    ],
+                    fallbackText: whatsappMessageText,
+                  });
+                  setWaCloudStatus(res);
+                  setWaCloudSending(false);
+                }}
+                className="w-full py-2.5 bg-[#0c4033] hover:bg-[#093227] disabled:opacity-50 text-white font-bold rounded-xl flex items-center justify-center gap-2 cursor-pointer"
+              >
+                {waCloudSending ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <Send className="w-3.5 h-3.5" />
+                )}
+                <span>
+                  {waCloudSending
+                    ? 'Sending via Cloud API...'
+                    : 'Send via Meta WhatsApp Cloud API'}
+                </span>
+              </button>
               <div className="flex items-center justify-between gap-2">
                 <button
                   type="button"
