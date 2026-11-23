@@ -34,6 +34,7 @@ import BillingView from './components/billing/BillingView';
 import SettingsView from './components/settings/SettingsView';
 import NewReservationModal from './components/bookings/NewReservationModal';
 import StaffAuthModal from './components/auth/StaffAuthModal';
+import FirebaseConfigErrorScreen from './components/auth/FirebaseConfigErrorScreen';
 
 import { useAuth } from './context/AuthContext';
 import { resortDetails } from './data';
@@ -809,6 +810,15 @@ export default function App() {
 
   const showEmptyStarterBanner =
     firestoreStatus === 'connected' && !dataLoading && rooms.length === 0 && bookings.length === 0;
+
+  if (!firebaseConfigured) {
+    return (
+      <>
+        <FirebaseConfigErrorScreen onOpenDiagnostics={openAuthModal} />
+        <StaffAuthModal />
+      </>
+    );
+  }
 
   return (
     <div

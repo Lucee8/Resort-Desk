@@ -47,38 +47,138 @@ export const firebaseConfig = {
   ...(rawMeasurementId ? { measurementId: rawMeasurementId } : {}),
 };
 
+export type FirebaseEnvVarStatus = 'configured' | 'defaulted' | 'missing' | 'invalid';
+
+export interface FirebaseEnvVarCheck {
+  key: string;
+  required: boolean;
+  presentInEnv: boolean;
+  status: FirebaseEnvVarStatus;
+  note: string;
+}
+
 export interface FirebaseConfigDiagnostics {
   isValid: boolean;
   missingKeys: string[];
   invalidKeys: string[];
+  missingEnvVars: string[];
+  envVarChecks: FirebaseEnvVarCheck[];
   errorMessage: string | null;
 }
 
 export function getFirebaseConfigDiagnostics(): FirebaseConfigDiagnostics {
   const missingKeys: string[] = [];
   const invalidKeys: string[] = [];
+  const missingEnvVars: string[] = [];
 
-  if (isPlaceholderOrEmpty(firebaseConfig.apiKey)) {
+  const rawApiKey = cleanEnvValue(import.meta.env.VITE_FIREBASE_API_KEY);
+  const rawAuthDomain = cleanEnvValue(import.meta.env.VITE_FIREBASE_AUTH_DOMAIN);
+  const rawProjectId = cleanEnvValue(import.meta.env.VITE_FIREBASE_PROJECT_ID);
+  const rawStorageBucket = cleanEnvValue(import.meta.env.VITE_FIREBASE_STORAGE_BUCKET);
+  const rawMessagingSenderId = cleanEnvValue(import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID);
+  const rawAppId = cleanEnvValue(import.meta.env.VITE_FIREBASE_APP_ID);
+
+  const envVarChecks: FirebaseEnvVarCheck[] = [];
+
+  // 1. VITE_FIREBASE_API_KEY (blocking if missing or malformed)
+  if (isPlaceholderOrEmpty(rawApiKey)) {
     missingKeys.push('VITE_FIREBASE_API_KEY');
-  } else if (!firebaseConfig.apiKey.startsWith('AIza') || firebaseConfig.apiKey.length < 25) {
+    missingEnvVars.push('VITE_FIREBASE_API_KEY');
+    envVarChecks.push({
+      key: 'VITE_FIREBASE_API_KEY',
+      required: true,
+      presentInEnv: false,
+      status: 'missing',
+      note: 'Missing at Vite build time (no fallback allowed).',
+    });
+  } else if (!rawApiKey.startsWith('AIza') || rawApiKey.length < 25) {
     invalidKeys.push('VITE_FIREBASE_API_KEY');
+    envVarChecks.push({
+      key: 'VITE_FIREBASE_API_KEY',
+      required: true,
+      presentInEnv: true,
+      status: 'invalid',
+      note: 'Expected a valid Firebase Web API key starting with "AIza".',
+    });
+  } else {
+    envVarChecks.push({
+      key: 'VITE_FIREBASE_API_KEY',
+      required: true,
+      presentInEnv: true,
+      status: 'configured',
+      note: 'Configured via build environment.',
+    });
   }
 
-  if (isPlaceholderOrEmpty(firebaseConfig.authDomain)) {
-    missingKeys.push('VITE_FIREBASE_AUTH_DOMAIN');
+  // 2–6. Project identifiers (resortdesk-mykonos defaults preserved, missing env vars still tracked)
+  const projectFields: Array<{
+    key: string;
+    rawValue: string;
+    effectiveValue: string;
+  }> = [
+    {
+      key: 'VITE_FIREBASE_AUTH_DOMAIN',
+      rawValue: rawAuthDomain,
+      effectiveValue: firebaseConfig.authDomain,
+    },
+    {
+      key: 'VITE_FIREBASE_PROJECT_ID',
+      rawValue: rawProjectId,
+      effectiveValue: firebaseConfig.projectId,
+    },
+    {
+      key: 'VITE_FIREBASE_STORAGE_BUCKET',
+      rawValue: rawStorageBucket,
+      effectiveValue: firebaseConfig.storageBucket,
+    },
+    {
+      key: 'VITE_FIREBASE_MESSAGING_SENDER_ID',
+      rawValue: rawMessagingSenderId,
+      effectiveValue: firebaseConfig.messagingSenderId,
+    },
+    {
+      key: 'VITE_FIREBASE_APP_ID',
+      rawValue: rawAppId,
+      effectiveValue: firebaseConfig.appId,
+    },
+  ];
+
+  for (const field of projectFields) {
+    const rawMissing = isPlaceholderOrEmpty(field.rawValue);
+    if (rawMissing) {
+      missingEnvVars.push(field.key);
+    }
+    if (isPlaceholderOrEmpty(field.effectiveValue)) {
+      missingKeys.push(field.key);
+      envVarChecks.push({
+        key: field.key,
+        required: true,
+        presentInEnv: false,
+        status: 'missing',
+        note: 'Missing from build environment.',
+      });
+    } else {
+      envVarChecks.push({
+        key: field.key,
+        required: true,
+        presentInEnv: !rawMissing,
+        status: rawMissing ? 'defaulted' : 'configured',
+        note: rawMissing
+          ? 'Not set in build env; using resortdesk-mykonos default.'
+          : 'Configured via build environment.',
+      });
+    }
   }
-  if (isPlaceholderOrEmpty(firebaseConfig.projectId)) {
-    missingKeys.push('VITE_FIREBASE_PROJECT_ID');
-  }
-  if (isPlaceholderOrEmpty(firebaseConfig.storageBucket)) {
-    missingKeys.push('VITE_FIREBASE_STORAGE_BUCKET');
-  }
-  if (isPlaceholderOrEmpty(firebaseConfig.messagingSenderId)) {
-    missingKeys.push('VITE_FIREBASE_MESSAGING_SENDER_ID');
-  }
-  if (isPlaceholderOrEmpty(firebaseConfig.appId)) {
-    missingKeys.push('VITE_FIREBASE_APP_ID');
-  }
+
+  // 7. Optional VITE_FIREBASE_MEASUREMENT_ID
+  const rawMeasValid = !isPlaceholderOrEmpty(rawMeasurementId);
+  envVarChecks.push({
+    key: 'VITE_FIREBASE_MEASUREMENT_ID',
+    required: false,
+    presentInEnv: rawMeasValid,
+    status: rawMeasValid ? 'configured' : 'missing',
+    note: rawMeasValid ? 'Configured via build environment.' : 'Optional (Analytics).',
+  });
 
   const isValid = missingKeys.length === 0 && invalidKeys.length === 0;
   let errorMessage: string | null = null;
@@ -93,7 +193,14 @@ export function getFirebaseConfigDiagnostics(): FirebaseConfigDiagnostics {
     errorMessage = `${parts.join('. ')}. Set all VITE_FIREBASE_* variables in your production build environment and rebuild.`;
   }
 
-  return { isValid, missingKeys, invalidKeys, errorMessage };
+  return {
+    isValid,
+    missingKeys,
+    invalidKeys,
+    missingEnvVars,
+    envVarChecks,
+    errorMessage,
+  };
 }
 
 export const firebaseConfigDiagnostics: FirebaseConfigDiagnostics =
