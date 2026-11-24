@@ -8,19 +8,42 @@ if (!admin.apps.length) {
 export const db = admin.firestore();
 
 const ALLOWED_STAFF_ROLES = new Set([
+  'administrator',
   'admin',
   'resort owner',
   'owner',
-  'manager',
+  'super admin',
   'general manager',
-  'front desk',
+  'manager',
   'receptionist',
+  'front desk',
+  'front desk associate',
+  'housekeeping staff',
+  'housekeeping',
+  'housekeeper',
+  'steward',
+  'maintenance staff',
+  'maintenance',
+  'technician',
+  'accountant',
+  'finance',
+  'inventory manager',
+  'storekeeper',
+  'inventory',
   'staff',
   'operations',
 ]);
 
+const ADMINISTRATOR_ROLES = new Set([
+  'administrator',
+  'admin',
+  'resort owner',
+  'owner',
+  'super admin',
+]);
+
 /**
- * Verifies that the caller is an authenticated Firebase user with an authorized
+ * Verifies that the caller is an authenticated Firebase user with an active
  * Mykonos Cottage staff or admin profile.
  */
 export async function assertAuthorizedStaff(
@@ -29,25 +52,45 @@ export async function assertAuthorizedStaff(
   if (!request.auth || !request.auth.uid) {
     throw new HttpsError(
       'unauthenticated',
-      'Staff authentication is required to dispatch guest communications.'
+      'Staff authentication is required to perform this action.'
     );
   }
 
   const uid = request.auth.uid;
   const email = (request.auth.token.email as string | undefined) || '';
 
-  // 1. Check dedicated admins collection
-  const adminDoc = await db.collection('admins').doc(uid).get();
-  if (adminDoc.exists) {
-    return { uid, email, role: 'admin' };
+  // 1. Check primary RBAC staff/{uid} collection
+  const staffDoc = await db.collection('staff').doc(uid).get();
+  if (staffDoc.exists) {
+    const data = staffDoc.data() || {};
+    if (data.isActive === false || data.disabled === true) {
+      throw new HttpsError(
+        'permission-denied',
+        'Your staff account has been deactivated. Contact an Administrator.'
+      );
+    }
+    const role = String(data.role || '').trim().toLowerCase();
+    if (ALLOWED_STAFF_ROLES.has(role)) {
+      return { uid, email: String(data.email || email), role };
+    }
+    throw new HttpsError(
+      'permission-denied',
+      'Your staff account does not have an authorized Mykonos Cottage role.'
+    );
   }
 
-  // 2. Check staffProfiles/{uid}
+  // 2. Check legacy dedicated admins collection
+  const adminDoc = await db.collection('admins').doc(uid).get();
+  if (adminDoc.exists) {
+    return { uid, email, role: 'administrator' };
+  }
+
+  // 3. Check legacy staffProfiles/{uid}
   const profileDoc = await db.collection('staffProfiles').doc(uid).get();
   if (profileDoc.exists) {
     const profile = profileDoc.data() || {};
-    const role = String(profile.role || 'staff').toLowerCase();
-    if (profile.disabled === true) {
+    const role = String(profile.role || 'staff').trim().toLowerCase();
+    if (profile.disabled === true || profile.isActive === false) {
       throw new HttpsError('permission-denied', 'Your staff account is disabled.');
     }
     if (ALLOWED_STAFF_ROLES.has(role)) {
@@ -55,8 +98,8 @@ export async function assertAuthorizedStaff(
     }
   }
 
-  // 3. Fallback: check active staffMembers by verified email
-  if (email) {
+  // 4. Fallback: check active staffMembers by verified email
+  if (email && request.auth.token.email_verified === true) {
     const staffSnap = await db
       .collection('staffMembers')
       .where('email', '==', email)
@@ -66,7 +109,10 @@ export async function assertAuthorizedStaff(
     if (!staffSnap.empty) {
       const staffData = staffSnap.docs[0].data();
       if (staffData.status !== 'Terminated') {
-        return { uid, email, role: String(staffData.role || 'staff').toLowerCase() };
+        const role = String(staffData.role || 'staff').trim().toLowerCase();
+        if (ALLOWED_STAFF_ROLES.has(role)) {
+          return { uid, email, role };
+        }
       }
     }
   }
@@ -74,6 +120,55 @@ export async function assertAuthorizedStaff(
   throw new HttpsError(
     'permission-denied',
     'Authenticated user is not registered as authorized Mykonos Cottage staff.'
+  );
+}
+
+/**
+ * Verifies that the caller is an active Administrator allowed to manage staff accounts & RBAC.
+ */
+export async function assertAdministrator(
+  request: CallableRequest<unknown>
+): Promise<{ uid: string; email: string }> {
+  if (!request.auth || !request.auth.uid) {
+    throw new HttpsError('unauthenticated', 'Administrator authentication is required.');
+  }
+
+  const uid = request.auth.uid;
+  const email = (request.auth.token.email as string | undefined) || '';
+
+  const staffDoc = await db.collection('staff').doc(uid).get();
+  if (staffDoc.exists) {
+    const data = staffDoc.data() || {};
+    const role = String(data.role || '').trim().toLowerCase();
+    if (data.isActive === false || data.disabled === true) {
+      throw new HttpsError('permission-denied', 'Your administrator account is deactivated.');
+    }
+    if (ADMINISTRATOR_ROLES.has(role)) {
+      return { uid, email: String(data.email || email) };
+    }
+    throw new HttpsError(
+      'permission-denied',
+      'Only an active Administrator can manage staff login accounts and permissions.'
+    );
+  }
+
+  const adminDoc = await db.collection('admins').doc(uid).get();
+  if (adminDoc.exists) {
+    return { uid, email };
+  }
+
+  const profileDoc = await db.collection('staffProfiles').doc(uid).get();
+  if (profileDoc.exists) {
+    const profile = profileDoc.data() || {};
+    const role = String(profile.role || '').trim().toLowerCase();
+    if (profile.disabled !== true && profile.isActive !== false && ADMINISTRATOR_ROLES.has(role)) {
+      return { uid, email };
+    }
+  }
+
+  throw new HttpsError(
+    'permission-denied',
+    'Only an active Administrator can manage staff login accounts and permissions.'
   );
 }
 

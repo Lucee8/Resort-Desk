@@ -2,6 +2,7 @@ import React, { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App.tsx';
 import { AuthProvider } from './context/AuthContext';
+import { RouterProvider } from './context/RouterContext';
 import './index.css';
 
 interface RootErrorBoundaryState {
@@ -73,9 +74,11 @@ class RootErrorBoundary extends React.Component<
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <RootErrorBoundary>
-      <AuthProvider>
-        <App />
-      </AuthProvider>
+      <RouterProvider>
+        <AuthProvider>
+          <App />
+        </AuthProvider>
+      </RouterProvider>
     </RootErrorBoundary>
   </StrictMode>
 );

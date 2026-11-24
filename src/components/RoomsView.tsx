@@ -27,6 +27,7 @@ import {
   MaintenanceTicket,
 } from '../types';
 import { formatINR } from '../utils/bookingUtils';
+import { useAuth } from '../context/AuthContext';
 
 interface RoomsViewProps {
   categories: RoomCategory[];
@@ -63,6 +64,10 @@ export default function RoomsView({
   onOpenMaintenanceModule,
   triggerToast,
 }: RoomsViewProps) {
+  const { hasPermission } = useAuth();
+  const canManageRooms = hasPermission('manage_rooms');
+  const canUpdateRoomStatus = hasPermission('update_room_status') || canManageRooms;
+
   const [searchQuery, setSearchQuery] = useState('');
   const [editingCategory, setEditingCategory] = useState<RoomCategory | null>(null);
   const [isUpdateRatesOpen, setIsUpdateRatesOpen] = useState(false);
@@ -118,6 +123,10 @@ export default function RoomsView({
 
   const handleSaveCategoryPrice = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!canManageRooms) {
+      triggerToast('Manager or Administrator permission is required to edit room tariffs.');
+      return;
+    }
     if (!editingCategory) return;
     try {
       await onUpdateCategory(editingCategory);
@@ -128,6 +137,10 @@ export default function RoomsView({
   };
 
   const handleDayClick = async (dayNum: number) => {
+    if (!canManageRooms) {
+      triggerToast('Manager or Administrator permission is required to modify blocked dates.');
+      return;
+    }
     const nextDays = blockedDays.includes(dayNum)
       ? blockedDays.filter((d) => d !== dayNum)
       : [...blockedDays, dayNum].sort((a, b) => a - b);
@@ -140,6 +153,10 @@ export default function RoomsView({
   };
 
   const handleToggleAmenity = async (amenity: PropertyAmenity) => {
+    if (!canManageRooms) {
+      triggerToast('Manager or Administrator permission is required to update amenities.');
+      return;
+    }
     const nextStatus = amenity.status === 'Enabled' ? 'Offline' : 'Enabled';
     try {
       await onUpdateAmenity({ ...amenity, status: nextStatus });
@@ -150,6 +167,7 @@ export default function RoomsView({
 
   const handleSaveNewAmenity = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!canManageRooms) return;
     if (!newAmenityName.trim()) return;
     const item: PropertyAmenity = {
       id: `pa-${Date.now()}`,
@@ -168,6 +186,7 @@ export default function RoomsView({
 
   const handleSaveNewCategory = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!canManageRooms) return;
     if (!newCatName.trim()) return;
     const cat: RoomCategory = {
       id: `cat-${Date.now()}`,
@@ -191,6 +210,10 @@ export default function RoomsView({
   };
 
   const handleRoomStatusChange = async (room: RoomUnit, nextStatus: RoomUnit['status']) => {
+    if (!canUpdateRoomStatus) {
+      triggerToast('You do not have permission to update room status.');
+      return;
+    }
     setUpdatingRoomId(room.id);
     try {
       await onUpdateRoomStatus(
@@ -300,14 +323,16 @@ export default function RoomsView({
               />
             </div>
 
-            <button
-              type="button"
-              onClick={() => setIsNewCategoryOpen(true)}
-              className="px-3.5 py-2 bg-teal-800 hover:bg-teal-900 text-white font-bold text-xs rounded-xl flex items-center gap-1 shadow transition-all whitespace-nowrap cursor-pointer"
-            >
-              <Plus className="w-4 h-4" />
-              <span>Add Category</span>
-            </button>
+            {canManageRooms && (
+              <button
+                type="button"
+                onClick={() => setIsNewCategoryOpen(true)}
+                className="px-3.5 py-2 bg-teal-800 hover:bg-teal-900 text-white font-bold text-xs rounded-xl flex items-center gap-1 shadow transition-all whitespace-nowrap cursor-pointer"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Add Category</span>
+              </button>
+            )}
           </div>
         </div>
 
@@ -377,12 +402,12 @@ export default function RoomsView({
                     </span>
                     <select
                       aria-label={`Status for ${room.roomName}`}
-                      disabled={updatingRoomId === room.id}
+                      disabled={updatingRoomId === room.id || !canUpdateRoomStatus}
                       value={room.status}
                       onChange={(e) =>
                         void handleRoomStatusChange(room, e.target.value as RoomUnit['status'])
                       }
-                      className="bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 text-[11px] font-semibold text-slate-700 focus:outline-none focus:border-teal-700 cursor-pointer"
+                      className="bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 text-[11px] font-semibold text-slate-700 focus:outline-none focus:border-teal-700 cursor-pointer disabled:opacity-60"
                     >
                       <option value="Available">Available</option>
                       <option value="Occupied">Occupied</option>
@@ -461,14 +486,16 @@ export default function RoomsView({
                     </p>
                   </div>
 
-                  <button
-                    type="button"
-                    onClick={() => setEditingCategory(cat)}
-                    className="p-2 bg-slate-50 hover:bg-slate-100 text-slate-500 hover:text-slate-800 rounded-xl transition-colors border border-slate-200 cursor-pointer"
-                    title="Edit Rate Values"
-                  >
-                    <Edit3 className="w-3.5 h-3.5" />
-                  </button>
+                  {canManageRooms && (
+                    <button
+                      type="button"
+                      onClick={() => setEditingCategory(cat)}
+                      className="p-2 bg-slate-50 hover:bg-slate-100 text-slate-500 hover:text-slate-800 rounded-xl transition-colors border border-slate-200 cursor-pointer"
+                      title="Edit Rate Values"
+                    >
+                      <Edit3 className="w-3.5 h-3.5" />
+                    </button>
+                  )}
                 </div>
               </div>
             ))}
@@ -484,14 +511,16 @@ export default function RoomsView({
                 Tariff tiers for weekdays, Tarkarli weekends, and holiday peaks.
               </p>
             </div>
-            <button
-              type="button"
-              onClick={() => setIsUpdateRatesOpen(true)}
-              className="px-4 py-2 bg-teal-900 hover:bg-teal-950 text-white font-bold text-xs rounded-xl flex items-center gap-1.5 shadow cursor-pointer self-start sm:self-auto"
-            >
-              <Sliders className="w-3.5 h-3.5" />
-              <span>Update Rates</span>
-            </button>
+            {canManageRooms && (
+              <button
+                type="button"
+                onClick={() => setIsUpdateRatesOpen(true)}
+                className="px-4 py-2 bg-teal-900 hover:bg-teal-950 text-white font-bold text-xs rounded-xl flex items-center gap-1.5 shadow cursor-pointer self-start sm:self-auto"
+              >
+                <Sliders className="w-3.5 h-3.5" />
+                <span>Update Rates</span>
+              </button>
+            )}
           </div>
 
           <div className="overflow-x-auto">
@@ -686,14 +715,16 @@ export default function RoomsView({
         <div className="bg-slate-50/50 rounded-3xl border border-slate-200/70 p-5 shadow-sm">
           <div className="flex justify-between items-center pb-3 border-b border-slate-200/60 mb-4">
             <h3 className="font-extrabold text-slate-800 text-sm">Property Amenities</h3>
-            <button
-              type="button"
-              onClick={() => setIsNewAmenityOpen(true)}
-              className="text-slate-400 hover:text-slate-700 transition-colors cursor-pointer"
-              title="Add Amenity"
-            >
-              <Plus className="w-4 h-4" />
-            </button>
+            {canManageRooms && (
+              <button
+                type="button"
+                onClick={() => setIsNewAmenityOpen(true)}
+                className="text-slate-400 hover:text-slate-700 transition-colors cursor-pointer"
+                title="Add Amenity"
+              >
+                <Plus className="w-4 h-4" />
+              </button>
+            )}
           </div>
 
           <div className="flex flex-col gap-3">

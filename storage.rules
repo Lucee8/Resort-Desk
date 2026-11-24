@@ -7,20 +7,63 @@ service firebase.storage {
       return request.auth != null && request.auth.uid != null;
     }
 
-    function isAuthorizedStaff() {
-      return isSignedIn() && (
-        firestore.exists(/databases/(default)/documents/admins/$(request.auth.uid)) ||
-        (
-          firestore.exists(/databases/(default)/documents/staffProfiles/$(request.auth.uid)) &&
-          firestore.get(/databases/(default)/documents/staffProfiles/$(request.auth.uid)).data.disabled != true
+    function hasStaffDoc() {
+      return isSignedIn()
+        && firestore.exists(/databases/(default)/documents/staff/$(request.auth.uid));
+    }
+
+    function staffData() {
+      return firestore.get(/databases/(default)/documents/staff/$(request.auth.uid)).data;
+    }
+
+    function isActiveStaffDoc() {
+      return hasStaffDoc()
+        && staffData().isActive != false
+        && staffData().disabled != true
+        && staffData().role in [
+          'Administrator',
+          'General Manager',
+          'Receptionist',
+          'Housekeeping Staff',
+          'Maintenance Staff',
+          'Accountant',
+          'Inventory Manager'
+        ];
+    }
+
+    function isLegacyAdmin() {
+      return isSignedIn()
+        && firestore.exists(/databases/(default)/documents/admins/$(request.auth.uid))
+        && (!hasStaffDoc() || (staffData().isActive != false && staffData().disabled != true));
+    }
+
+    function hasLegacyStaffProfile() {
+      return isSignedIn()
+        && !hasStaffDoc()
+        && firestore.exists(/databases/(default)/documents/staffProfiles/$(request.auth.uid))
+        && firestore.get(/databases/(default)/documents/staffProfiles/$(request.auth.uid)).data.disabled != true
+        && firestore.get(/databases/(default)/documents/staffProfiles/$(request.auth.uid)).data.isActive != false;
+    }
+
+    function hasStorageRole(allowedRoles) {
+      return isLegacyAdmin()
+        || (
+          isActiveStaffDoc() && (
+            staffData().role == 'Administrator' ||
+            staffData().role == 'General Manager' ||
+            staffData().role in allowedRoles
+          )
         )
-      );
+        || (
+          hasLegacyStaffProfile() &&
+          firestore.get(/databases/(default)/documents/staffProfiles/$(request.auth.uid)).data.role in allowedRoles
+        );
     }
 
     // Guest ID documents (Aadhaar / Passport / Driving Licence PII)
     match /guest-ids/{guestKey}/{fileName} {
-      allow read: if isAuthorizedStaff();
-      allow write: if isAuthorizedStaff()
+      allow read: if hasStorageRole(['Administrator', 'Admin', 'Resort Owner', 'Owner', 'General Manager', 'Manager', 'Receptionist', 'Front Desk']);
+      allow write: if hasStorageRole(['Administrator', 'Admin', 'Resort Owner', 'Owner', 'General Manager', 'Manager', 'Receptionist', 'Front Desk'])
         && request.resource != null
         && request.resource.size <= 5 * 1024 * 1024
         && (
@@ -31,8 +74,8 @@ service firebase.storage {
 
     // Housekeeping completion verification photos
     match /housekeeping-photos/{taskId}/{fileName} {
-      allow read: if isAuthorizedStaff();
-      allow write: if isAuthorizedStaff()
+      allow read: if hasStorageRole(['Administrator', 'Admin', 'Resort Owner', 'Owner', 'General Manager', 'Manager', 'Housekeeping Staff', 'Housekeeping']);
+      allow write: if hasStorageRole(['Administrator', 'Admin', 'Resort Owner', 'Owner', 'General Manager', 'Manager', 'Housekeeping Staff', 'Housekeeping'])
         && request.resource != null
         && request.resource.size <= 10 * 1024 * 1024
         && request.resource.contentType.matches('image/.*');
@@ -40,8 +83,8 @@ service firebase.storage {
 
     // Maintenance ticket photo evidence
     match /maintenance-photos/{ticketId}/{fileName} {
-      allow read: if isAuthorizedStaff();
-      allow write: if isAuthorizedStaff()
+      allow read: if hasStorageRole(['Administrator', 'Admin', 'Resort Owner', 'Owner', 'General Manager', 'Manager', 'Maintenance Staff', 'Maintenance', 'Technician']);
+      allow write: if hasStorageRole(['Administrator', 'Admin', 'Resort Owner', 'Owner', 'General Manager', 'Manager', 'Maintenance Staff', 'Maintenance', 'Technician'])
         && request.resource != null
         && request.resource.size <= 10 * 1024 * 1024
         && request.resource.contentType.matches('image/.*');

@@ -12,3 +12,10 @@ export {
 } from './email';
 
 export { dispatchDailyStayReminders } from './reminders';
+
+export {
+  createStaffAccount,
+  updateStaffAccount,
+  sendStaffPasswordReset,
+} from './staffAccounts';
+

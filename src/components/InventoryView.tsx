@@ -41,16 +41,36 @@ interface InventoryViewProps {
 }
 
 export default function InventoryView({ triggerToast }: InventoryViewProps) {
-  const { user, firestoreStatus } = useAuth();
+  const { user, staffProfile, role, firestoreStatus } = useAuth();
   const operatorName =
-    user?.displayName || user?.email?.split('@')[0] || 'Mykonos Storekeeper';
+    staffProfile?.fullName ||
+    user?.displayName ||
+    user?.email?.split('@')[0] ||
+    'Mykonos Storekeeper';
+
+  const mappedInventoryRole: InventoryUserRole =
+    role === 'Administrator'
+      ? 'Resort Owner'
+      : role === 'General Manager'
+        ? 'Manager'
+        : role === 'Accountant'
+          ? 'Accountant'
+          : role === 'Housekeeping Staff'
+            ? 'Housekeeping'
+            : role === 'Receptionist'
+              ? 'Receptionist'
+              : 'Storekeeper';
 
   const [items, setItems] = useState<InventoryItem[]>([]);
   const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>([]);
   const [suppliers, setSuppliers] = useState<InventorySupplier[]>([]);
   const [aiInsights, setAiInsights] = useState<InventoryAIInsight[]>([]);
 
-  const [userRole, setUserRole] = useState<InventoryUserRole>('Storekeeper');
+  const [userRole, setUserRole] = useState<InventoryUserRole>(mappedInventoryRole);
+
+  useEffect(() => {
+    setUserRole(mappedInventoryRole);
+  }, [mappedInventoryRole]);
   const [selectedCategory, setSelectedCategory] = useState<InventoryCategory>('All');
   const [globalSearch, setGlobalSearch] = useState<string>('');
 

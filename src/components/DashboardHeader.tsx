@@ -5,10 +5,10 @@ import {
   Settings,
   Menu,
   MapPin,
-  ShieldCheck,
-  Lock,
+  LogOut,
 } from 'lucide-react';
 import { FirestoreConnectionStatus } from '../services/firestoreBase';
+import { StaffAccountRole } from '../types';
 
 export interface OperationalHeaderAlert {
   id: string;
@@ -31,7 +31,10 @@ interface DashboardHeaderProps {
   propertyLocation?: string;
   firestoreStatus?: FirestoreConnectionStatus;
   staffLabel?: string | null;
+  staffRole?: StaffAccountRole | null;
+  staffAvatarUrl?: string | null;
   onOpenAuthModal?: () => void;
+  onSignOut?: () => void;
 }
 
 export default function DashboardHeader({
@@ -47,9 +50,20 @@ export default function DashboardHeader({
   propertyLocation = 'Tarkarli, Malvan',
   firestoreStatus = 'checking',
   staffLabel,
+  staffRole,
+  staffAvatarUrl,
   onOpenAuthModal,
+  onSignOut,
 }: DashboardHeaderProps) {
   const [showNotificationDropdown, setShowNotificationDropdown] = useState(false);
+
+  const initials = (staffLabel || 'Staff')
+    .split(' ')
+    .filter(Boolean)
+    .map((part) => part[0])
+    .join('')
+    .toUpperCase()
+    .slice(0, 2);
 
   return (
     <header
@@ -111,36 +125,6 @@ export default function DashboardHeader({
             </button>
           )}
         </div>
-
-        {/* Auth / Firestore session trigger */}
-        {onOpenAuthModal && (
-          <button
-            id="header-auth-btn"
-            type="button"
-            onClick={onOpenAuthModal}
-            className={`hidden md:inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-[11px] font-bold border transition-colors cursor-pointer ${
-              firestoreStatus === 'connected'
-                ? 'bg-emerald-50 text-emerald-800 border-emerald-200 hover:bg-emerald-100'
-                : firestoreStatus === 'permission-denied'
-                ? 'bg-amber-50 text-amber-800 border-amber-200 hover:bg-amber-100'
-                : 'bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200'
-            }`}
-            title="Manage Staff Authentication & Firebase Connection"
-          >
-            {firestoreStatus === 'connected' ? (
-              <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
-            ) : (
-              <Lock className="w-3.5 h-3.5 text-amber-600" />
-            )}
-            <span className="max-w-[120px] truncate">
-              {staffLabel
-                ? staffLabel
-                : firestoreStatus === 'connected'
-                ? 'Live Sync'
-                : 'Staff Sign In'}
-            </span>
-          </button>
-        )}
 
         {/* Action icons */}
         <div className="flex items-center gap-1">
@@ -215,37 +199,68 @@ export default function DashboardHeader({
             )}
           </div>
 
-          <button
-            id="header-settings-btn"
-            type="button"
-            onClick={onOpenSettings}
-            className="p-2 rounded-xl hover:bg-slate-100 transition-colors text-slate-600 hover:text-slate-900 cursor-pointer"
-            title="System Settings"
-          >
-            <Settings className="w-4 h-4" />
-          </button>
+          {onOpenSettings && (
+            <button
+              id="header-settings-btn"
+              type="button"
+              onClick={onOpenSettings}
+              className="p-2 rounded-xl hover:bg-slate-100 transition-colors text-slate-600 hover:text-slate-900 cursor-pointer"
+              title="System Settings"
+            >
+              <Settings className="w-4 h-4" />
+            </button>
+          )}
         </div>
 
-        {/* User Profile / Session Button */}
-        <button
-          type="button"
-          onClick={onOpenAuthModal}
-          className="flex items-center gap-2 border-l border-slate-200 pl-2.5 sm:pl-3 cursor-pointer"
-          title={staffLabel ? `Signed in as ${staffLabel}` : 'Staff Sign In'}
-        >
-          <div className="relative">
-            <img
-              src="https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&w=150&q=80"
-              alt="Resort Staff"
-              className="w-8 h-8 rounded-full object-cover border border-slate-200"
-            />
-            <span
-              className={`absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full border-2 border-white ${
-                firestoreStatus === 'connected' ? 'bg-emerald-500' : 'bg-amber-400'
-              }`}
-            />
-          </div>
-        </button>
+        {/* Logged-in Staff Profile & Role */}
+        <div className="flex items-center gap-2 border-l border-slate-200 pl-2.5 sm:pl-3">
+          <button
+            id="header-profile-btn"
+            type="button"
+            onClick={onOpenAuthModal}
+            className="flex items-center gap-2 text-left cursor-pointer group"
+            title={staffLabel ? `${staffLabel}${staffRole ? ` (${staffRole})` : ''}` : 'Staff Profile'}
+          >
+            <div className="relative">
+              {staffAvatarUrl ? (
+                <img
+                  src={staffAvatarUrl}
+                  alt={staffLabel || 'Staff Profile'}
+                  className="w-8 h-8 rounded-full object-cover border border-slate-200"
+                />
+              ) : (
+                <div className="w-8 h-8 rounded-full bg-[#004B38] text-white text-[11px] font-bold flex items-center justify-center border border-emerald-900/10">
+                  {initials}
+                </div>
+              )}
+              <span
+                className={`absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full border-2 border-white ${
+                  firestoreStatus === 'connected' ? 'bg-emerald-500' : 'bg-amber-400'
+                }`}
+              />
+            </div>
+            <div className="hidden md:block min-w-0">
+              <p className="text-xs font-bold text-slate-800 leading-tight max-w-[120px] truncate group-hover:text-[#004B38]">
+                {staffLabel || 'Staff'}
+              </p>
+              <p className="text-[10px] font-semibold text-slate-500 leading-tight max-w-[120px] truncate">
+                {staffRole || 'Authorized Staff'}
+              </p>
+            </div>
+          </button>
+
+          {onSignOut && (
+            <button
+              id="header-signout-btn"
+              type="button"
+              onClick={onSignOut}
+              className="p-2 rounded-xl text-slate-500 hover:text-rose-700 hover:bg-rose-50 transition-colors cursor-pointer"
+              title="Sign Out"
+            >
+              <LogOut className="w-4 h-4" />
+            </button>
+          )}
+        </div>
       </div>
     </header>
   );

@@ -1,0 +1,176 @@
+{
+  "entities": {
+    "StaffAccount": {
+      "title": "StaffAccount",
+      "description": "Authenticated ResortDesk AI staff account and RBAC role assignment at /staff/{uid}.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "fullName": { "type": "string", "minLength": 2, "maxLength": 120 },
+        "email": { "type": "string", "format": "email", "maxLength": 180 },
+        "phone": { "type": "string", "maxLength": 40 },
+        "role": {
+          "type": "string",
+          "enum": [
+            "Administrator",
+            "General Manager",
+            "Receptionist",
+            "Housekeeping Staff",
+            "Maintenance Staff",
+            "Accountant",
+            "Inventory Manager"
+          ]
+        },
+        "department": { "type": "string", "maxLength": 80 },
+        "isActive": { "type": "boolean" },
+        "profileImage": { "type": "string", "maxLength": 500 },
+        "createdAt": { "type": "string", "maxLength": 64 },
+        "updatedAt": { "type": "string", "maxLength": 64 }
+      },
+      "required": ["uid", "fullName", "email", "role", "isActive"]
+    },
+    "Booking": {
+      "title": "Booking",
+      "description": "Guest stay reservation at Mykonos Cottage, Tarkarli.",
+      "type": "object",
+      "properties": {
+        "guestName": { "type": "string", "minLength": 1, "maxLength": 160 },
+        "roomNumber": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "bookingStatus": {
+          "type": "string",
+          "enum": ["Confirmed", "Checked-in", "Checked-out", "Pending", "Cancelled"]
+        },
+        "paymentStatus": {
+          "type": "string",
+          "enum": ["Paid", "Partial", "Unpaid"]
+        },
+        "amount": { "type": "number" }
+      },
+      "required": ["guestName", "roomNumber", "bookingStatus", "paymentStatus", "amount"]
+    },
+    "Guest": {
+      "title": "Guest",
+      "description": "Guest CRM profile and KYC details.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "minLength": 1, "maxLength": 160 },
+        "phone": { "type": "string", "maxLength": 40 },
+        "email": { "type": "string", "maxLength": 180 }
+      },
+      "required": ["name"]
+    },
+    "Invoice": {
+      "title": "Invoice",
+      "description": "GST folio invoice for guest reservations and resort billing.",
+      "type": "object",
+      "properties": {
+        "invoiceNumber": { "type": "string", "minLength": 2, "maxLength": 64 },
+        "guestName": { "type": "string", "minLength": 1, "maxLength": 160 },
+        "totalAmount": { "type": "number" },
+        "status": {
+          "type": "string",
+          "enum": ["Paid", "Pending", "Partial", "Refunded", "Overdue"]
+        }
+      },
+      "required": ["invoiceNumber", "guestName", "totalAmount", "status"]
+    },
+    "Payment": {
+      "title": "Payment",
+      "description": "Payment settlement transaction.",
+      "type": "object",
+      "properties": {
+        "amount": { "type": "number" },
+        "method": { "type": "string", "minLength": 2, "maxLength": 64 }
+      },
+      "required": ["amount", "method"]
+    },
+    "RoomUnit": {
+      "title": "RoomUnit",
+      "description": "Individual cottage or suite unit at Mykonos Cottage.",
+      "type": "object",
+      "properties": {
+        "roomNumber": { "type": "string", "maxLength": 40 },
+        "roomName": { "type": "string", "maxLength": 120 },
+        "status": { "type": "string", "enum": ["Available", "Occupied", "Deep Clean", "Maintenance"] }
+      },
+      "required": ["roomNumber", "status"]
+    },
+    "HousekeepingTask": {
+      "title": "HousekeepingTask",
+      "description": "Room turnover checklist and photo verification task.",
+      "type": "object",
+      "properties": {
+        "roomNumber": { "type": "string", "maxLength": 80 },
+        "status": { "type": "string", "enum": ["Pending", "In Progress", "Cleaned", "Verified"] }
+      },
+      "required": ["roomNumber", "status"]
+    },
+    "MaintenanceTicket": {
+      "title": "MaintenanceTicket",
+      "description": "Property maintenance issue ticket and repair log.",
+      "type": "object",
+      "properties": {
+        "roomNumber": { "type": "string", "maxLength": 80 },
+        "title": { "type": "string", "maxLength": 200 },
+        "status": { "type": "string", "maxLength": 40 }
+      },
+      "required": ["roomNumber", "title", "status"]
+    },
+    "InventoryItem": {
+      "title": "InventoryItem",
+      "description": "Resort consumable or stock item.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "maxLength": 160 },
+        "currentStock": { "type": "number" }
+      },
+      "required": ["name", "currentStock"]
+    }
+  },
+  "firestore": {
+    "/staff/{uid}": {
+      "schema": { "$ref": "#/entities/StaffAccount" },
+      "description": "Primary RBAC staff accounts, roles, permissions, and active flags."
+    },
+    "/admins/{uid}": {
+      "schema": { "$ref": "#/entities/StaffAccount" },
+      "description": "Legacy administrator marker records."
+    },
+    "/staffProfiles/{uid}": {
+      "schema": { "$ref": "#/entities/StaffAccount" },
+      "description": "Legacy staff profile records synchronized for backward compatibility."
+    },
+    "/bookings/{bookingId}": {
+      "schema": { "$ref": "#/entities/Booking" },
+      "description": "Property reservations and check-in/check-out records."
+    },
+    "/guests/{guestId}": {
+      "schema": { "$ref": "#/entities/Guest" },
+      "description": "Guest CRM records and KYC references."
+    },
+    "/invoices/{invoiceId}": {
+      "schema": { "$ref": "#/entities/Invoice" },
+      "description": "GST invoices and billing folios."
+    },
+    "/payments/{paymentId}": {
+      "schema": { "$ref": "#/entities/Payment" },
+      "description": "Payment ledger entries."
+    },
+    "/rooms/{roomId}": {
+      "schema": { "$ref": "#/entities/RoomUnit" },
+      "description": "Cottage and suite inventory units."
+    },
+    "/housekeepingTasks/{taskId}": {
+      "schema": { "$ref": "#/entities/HousekeepingTask" },
+      "description": "Room cleaning workflows and verification logs."
+    },
+    "/maintenanceTickets/{ticketId}": {
+      "schema": { "$ref": "#/entities/MaintenanceTicket" },
+      "description": "Resort maintenance work orders."
+    },
+    "/inventoryItems/{itemId}": {
+      "schema": { "$ref": "#/entities/InventoryItem" },
+      "description": "Resort inventory stock items."
+    }
+  }
+}

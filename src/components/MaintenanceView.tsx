@@ -51,9 +51,21 @@ export default function MaintenanceView({
   navigationKey,
   triggerToast,
 }: MaintenanceViewProps) {
-  const { user, firestoreStatus } = useAuth();
+  const { user, staffProfile, role, firestoreStatus } = useAuth();
   const operatorName =
-    user?.displayName || user?.email?.split('@')[0] || 'Mykonos Staff';
+    staffProfile?.fullName ||
+    user?.displayName ||
+    user?.email?.split('@')[0] ||
+    'Mykonos Staff';
+
+  const mappedMaintenanceRole: MaintenanceUserRole =
+    role === 'Administrator'
+      ? 'Resort Owner'
+      : role === 'Maintenance Staff'
+        ? 'Technician'
+        : role === 'Receptionist'
+          ? 'Receptionist'
+          : 'Manager';
 
   const [technicians, setTechnicians] = useState<Technician[]>([]);
   const [predictiveAlerts, setPredictiveAlerts] = useState<PredictiveMaintenanceAlert[]>([]);
@@ -61,10 +73,14 @@ export default function MaintenanceView({
 
   const [searchQuery, setSearchQuery] = useState('');
   const [activeFilter, setActiveFilter] = useState<string>(initialFilter || 'all');
-  const [userRole, setUserRole] = useState<MaintenanceUserRole>('Manager');
+  const [userRole, setUserRole] = useState<MaintenanceUserRole>(mappedMaintenanceRole);
   const [selectedProperty, setSelectedProperty] = useState(
     'Mykonos Cottage (All Cottages)'
   );
+
+  useEffect(() => {
+    setUserRole(mappedMaintenanceRole);
+  }, [mappedMaintenanceRole]);
 
   useEffect(() => {
     if (navigationKey === undefined) return;

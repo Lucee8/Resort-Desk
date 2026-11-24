@@ -19,32 +19,128 @@ service cloud.firestore {
       return request.auth != null && request.auth.uid != null;
     }
 
-    function isAdmin() {
+    function hasStaffDoc() {
       return isSignedIn()
-        && exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+        && exists(/databases/$(database)/documents/staff/$(request.auth.uid));
     }
 
-    function hasActiveStaffProfile() {
+    function staffData() {
+      return get(/databases/$(database)/documents/staff/$(request.auth.uid)).data;
+    }
+
+    function isActiveStaffDoc() {
+      return hasStaffDoc()
+        && staffData().isActive != false
+        && staffData().disabled != true
+        && staffData().role in [
+          'Administrator',
+          'General Manager',
+          'Receptionist',
+          'Housekeeping Staff',
+          'Maintenance Staff',
+          'Accountant',
+          'Inventory Manager'
+        ];
+    }
+
+    function isLegacyAdmin() {
       return isSignedIn()
+        && exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+        && (!hasStaffDoc() || (staffData().isActive != false && staffData().disabled != true));
+    }
+
+    function hasLegacyStaffProfile() {
+      return isSignedIn()
+        && !hasStaffDoc()
         && exists(/databases/$(database)/documents/staffProfiles/$(request.auth.uid))
-        && get(/databases/$(database)/documents/staffProfiles/$(request.auth.uid)).data.disabled != true;
+        && get(/databases/$(database)/documents/staffProfiles/$(request.auth.uid)).data.disabled != true
+        && get(/databases/$(database)/documents/staffProfiles/$(request.auth.uid)).data.isActive != false;
     }
 
     function isStaff() {
-      return isAdmin() || hasActiveStaffProfile();
+      return isActiveStaffDoc() || isLegacyAdmin() || hasLegacyStaffProfile();
+    }
+
+    function isAdmin() {
+      return isLegacyAdmin()
+        || (isActiveStaffDoc() && staffData().role == 'Administrator')
+        || (
+          hasLegacyStaffProfile() &&
+          get(/databases/$(database)/documents/staffProfiles/$(request.auth.uid)).data.role in [
+            'Administrator',
+            'Admin',
+            'Resort Owner',
+            'Owner',
+            'Super Admin'
+          ]
+        );
     }
 
     function isManagerOrAdmin() {
-      return isAdmin() || (
-        hasActiveStaffProfile() &&
-        get(/databases/$(database)/documents/staffProfiles/$(request.auth.uid)).data.role in [
-          'Admin',
-          'Resort Owner',
-          'Owner',
-          'Manager',
-          'General Manager'
+      return isAdmin()
+        || (isActiveStaffDoc() && staffData().role == 'General Manager')
+        || (
+          hasLegacyStaffProfile() &&
+          get(/databases/$(database)/documents/staffProfiles/$(request.auth.uid)).data.role in [
+            'General Manager',
+            'Manager'
+          ]
+        );
+    }
+
+    function hasStaffRole(allowedRoles) {
+      return isManagerOrAdmin()
+        || (isActiveStaffDoc() && staffData().role in allowedRoles)
+        || (
+          hasLegacyStaffProfile() &&
+          get(/databases/$(database)/documents/staffProfiles/$(request.auth.uid)).data.role in allowedRoles
+        );
+    }
+
+    function hasStaffPerm(perm) {
+      return isAdmin()
+        || (
+          isActiveStaffDoc()
+          && ('permissions' in staffData())
+          && staffData().permissions is list
+          && perm in staffData().permissions
+        );
+    }
+
+    function isValidStaffWrite(uid) {
+      let d = request.resource.data;
+      return d.keys().hasAll(['uid', 'fullName', 'email', 'role', 'isActive'])
+        && d.keys().hasOnly([
+          'uid',
+          'fullName',
+          'email',
+          'phone',
+          'role',
+          'permissions',
+          'department',
+          'isActive',
+          'profileImage',
+          'createdAt',
+          'updatedAt',
+          'createdByUid'
+        ])
+        && d.uid == uid
+        && d.fullName is string && d.fullName.size() >= 2 && d.fullName.size() <= 120
+        && d.email is string && d.email.size() >= 3 && d.email.size() <= 180
+        && (!('phone' in d) || (d.phone is string && d.phone.size() <= 40))
+        && (!('department' in d) || (d.department is string && d.department.size() <= 80))
+        && (!('profileImage' in d) || (d.profileImage is string && d.profileImage.size() <= 500))
+        && (!('permissions' in d) || (d.permissions is list && d.permissions.size() <= 40))
+        && d.role in [
+          'Administrator',
+          'General Manager',
+          'Receptionist',
+          'Housekeeping Staff',
+          'Maintenance Staff',
+          'Accountant',
+          'Inventory Manager'
         ]
-      );
+        && d.isActive is bool;
     }
 
     function isValidBookingWrite() {
@@ -78,23 +174,51 @@ service cloud.firestore {
     }
 
     // ------------------------------------------------------------------
-    // Staff Profiles & Admins (Strict Privilege Escalation Guard)
+    // Primary RBAC Staff Directory (/staff/{uid}) & Legacy Auth Collections
     // ------------------------------------------------------------------
+    match /staff/{uid} {
+      allow get: if isSignedIn() && isValidId(uid) && (request.auth.uid == uid || isAdmin() || hasStaffPerm('manage_staff_accounts'));
+      allow list: if isAdmin() || hasStaffPerm('manage_staff_accounts');
+      allow create: if isValidId(uid)
+        && isValidStaffWrite(uid)
+        && (isAdmin() || hasStaffPerm('manage_staff_accounts'));
+      allow update: if isValidId(uid) && (
+        (
+          (isAdmin() || hasStaffPerm('manage_staff_accounts'))
+          && isValidStaffWrite(uid)
+          && request.resource.data.uid == resource.data.uid
+        ) ||
+        (
+          request.auth.uid == uid
+          && isValidStaffWrite(uid)
+          && request.resource.data.uid == resource.data.uid
+          && request.resource.data.email == resource.data.email
+          && request.resource.data.role == resource.data.role
+          && request.resource.data.isActive == resource.data.isActive
+          && (!('permissions' in resource.data)
+            ? !('permissions' in request.resource.data)
+            : request.resource.data.permissions == resource.data.permissions)
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['fullName', 'phone', 'profileImage', 'updatedAt'])
+        )
+      );
+      allow delete: if isAdmin() && isValidId(uid);
+    }
+
     match /admins/{uid} {
-      allow get: if isSignedIn() && (request.auth.uid == uid || isAdmin());
+      allow get: if isSignedIn() && isValidId(uid) && (request.auth.uid == uid || isAdmin());
       allow list: if isAdmin();
-      allow write: if isAdmin();
+      allow write: if isAdmin() && isValidId(uid);
     }
 
     match /staffProfiles/{uid} {
-      allow get: if isSignedIn() && (request.auth.uid == uid || isManagerOrAdmin());
+      allow get: if isSignedIn() && isValidId(uid) && (request.auth.uid == uid || isManagerOrAdmin());
       allow list: if isManagerOrAdmin();
-      allow create: if isManagerOrAdmin()
+      allow create: if isAdmin()
         && isValidId(uid)
         && request.resource.data.keys().hasAll(['uid', 'email', 'role'])
         && request.resource.data.uid == uid;
       allow update: if isValidId(uid) && (
-        isManagerOrAdmin() ||
+        isAdmin() ||
         (
           request.auth.uid == uid
           && request.resource.data.uid == resource.data.uid
@@ -103,24 +227,27 @@ service cloud.firestore {
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['displayName', 'lastLoginAt', 'updatedAt'])
         )
       );
-      allow delete: if isAdmin();
+      allow delete: if isAdmin() && isValidId(uid);
     }
 
     // ------------------------------------------------------------------
     // Cloud Functions Internal Idempotency & Webhook Collections
     // ------------------------------------------------------------------
     match /whatsappDispatchKeys/{keyId} {
-      allow get, list: if isStaff();
+      allow get: if isValidId(keyId) && (hasStaffRole(['Receptionist']) || hasStaffPerm('manage_whatsapp'));
+      allow list: if hasStaffRole(['Receptionist']) || hasStaffPerm('manage_whatsapp');
       allow write: if false; // Admin SDK / Cloud Functions only
     }
 
     match /emailDispatchKeys/{keyId} {
-      allow get, list: if isStaff();
+      allow get: if isValidId(keyId) && (hasStaffRole(['Receptionist', 'Accountant']) || hasStaffPerm('manage_billing'));
+      allow list: if hasStaffRole(['Receptionist', 'Accountant']) || hasStaffPerm('manage_billing');
       allow write: if false; // Admin SDK / Cloud Functions only
     }
 
     match /whatsappInbound/{wamid} {
-      allow get, list: if isStaff();
+      allow get: if isValidId(wamid) && (hasStaffRole(['Receptionist']) || hasStaffPerm('manage_whatsapp'));
+      allow list: if hasStaffRole(['Receptionist']) || hasStaffPerm('manage_whatsapp');
       allow write: if false; // Admin SDK / Webhook Cloud Function only
     }
 
@@ -136,201 +263,318 @@ service cloud.firestore {
     // Core PMS, Guest PII & Financial Collections
     // ------------------------------------------------------------------
     match /bookings/{bookingId} {
-      allow get: if isStaff() && isValidId(bookingId);
-      allow list: if isStaff();
-      allow create, update: if isStaff() && isValidId(bookingId) && isValidBookingWrite();
-      allow delete: if isManagerOrAdmin() && isValidId(bookingId);
+      allow get: if isValidId(bookingId) && (
+        hasStaffRole(['Receptionist', 'Accountant']) ||
+        hasStaffPerm('manage_bookings') ||
+        hasStaffPerm('view_billing') ||
+        hasStaffPerm('view_reports')
+      );
+      allow list: if hasStaffRole(['Receptionist', 'Accountant']) ||
+        hasStaffPerm('manage_bookings') ||
+        hasStaffPerm('view_billing') ||
+        hasStaffPerm('view_reports');
+      allow create, update: if isValidId(bookingId)
+        && isValidBookingWrite()
+        && (hasStaffRole(['Receptionist']) || hasStaffPerm('manage_bookings') || hasStaffPerm('checkin_checkout'));
+      allow delete: if isValidId(bookingId) && (isManagerOrAdmin() || hasStaffPerm('delete_records'));
     }
 
     match /guests/{guestId} {
-      allow get: if isStaff() && isValidId(guestId);
-      allow list: if isStaff();
-      allow create, update: if isStaff() && isValidId(guestId) && isValidGuestWrite();
-      allow delete: if isManagerOrAdmin() && isValidId(guestId);
+      allow get: if isValidId(guestId) && (
+        hasStaffRole(['Receptionist']) ||
+        hasStaffPerm('view_guests') ||
+        hasStaffPerm('manage_guests')
+      );
+      allow list: if hasStaffRole(['Receptionist']) ||
+        hasStaffPerm('view_guests') ||
+        hasStaffPerm('manage_guests');
+      allow create, update: if isValidId(guestId)
+        && isValidGuestWrite()
+        && (hasStaffRole(['Receptionist']) || hasStaffPerm('manage_guests'));
+      allow delete: if isValidId(guestId) && (isManagerOrAdmin() || hasStaffPerm('delete_records'));
     }
 
     match /invoices/{invoiceId} {
-      allow get: if isStaff() && isValidId(invoiceId);
-      allow list: if isStaff();
-      allow create, update: if isStaff() && isValidId(invoiceId) && isValidInvoiceWrite();
-      allow delete: if isManagerOrAdmin() && isValidId(invoiceId);
+      allow get: if isValidId(invoiceId) && (
+        hasStaffRole(['Accountant', 'Receptionist']) ||
+        hasStaffPerm('view_billing') ||
+        hasStaffPerm('manage_billing') ||
+        hasStaffPerm('view_reports')
+      );
+      allow list: if hasStaffRole(['Accountant', 'Receptionist']) ||
+        hasStaffPerm('view_billing') ||
+        hasStaffPerm('manage_billing') ||
+        hasStaffPerm('view_reports');
+      allow create: if isValidId(invoiceId)
+        && isValidInvoiceWrite()
+        && (hasStaffRole(['Accountant', 'Receptionist']) || hasStaffPerm('manage_billing'));
+      allow update: if isValidId(invoiceId)
+        && isValidInvoiceWrite()
+        && (
+          (hasStaffRole(['Accountant']) || hasStaffPerm('process_refunds')) ||
+          ((hasStaffRole(['Receptionist']) || hasStaffPerm('manage_billing')) && request.resource.data.status != 'Refunded')
+        );
+      allow delete: if isValidId(invoiceId) && (isManagerOrAdmin() || hasStaffPerm('delete_records'));
     }
 
     match /payments/{paymentId} {
-      allow get: if isStaff() && isValidId(paymentId);
-      allow list: if isStaff();
-      allow create: if isStaff() && isValidId(paymentId) && isValidPaymentWrite();
-      allow update, delete: if isManagerOrAdmin() && isValidId(paymentId);
+      allow get: if isValidId(paymentId) && (
+        hasStaffRole(['Accountant', 'Receptionist']) ||
+        hasStaffPerm('view_billing') ||
+        hasStaffPerm('manage_billing')
+      );
+      allow list: if hasStaffRole(['Accountant', 'Receptionist']) ||
+        hasStaffPerm('view_billing') ||
+        hasStaffPerm('manage_billing');
+      allow create: if isValidId(paymentId)
+        && isValidPaymentWrite()
+        && (hasStaffRole(['Accountant', 'Receptionist']) || hasStaffPerm('manage_billing'));
+      allow update, delete: if isValidId(paymentId) && (
+        isManagerOrAdmin() ||
+        hasStaffRole(['Accountant']) ||
+        hasStaffPerm('process_refunds')
+      );
     }
 
     match /rooms/{roomId} {
       allow get: if isStaff() && isValidId(roomId);
       allow list: if isStaff();
-      allow create, update: if isStaff() && isValidId(roomId);
-      allow delete: if isManagerOrAdmin() && isValidId(roomId);
+      allow create: if isValidId(roomId) && (isManagerOrAdmin() || hasStaffPerm('manage_rooms'));
+      allow update: if isValidId(roomId) && (
+        hasStaffRole(['Receptionist', 'Housekeeping Staff', 'Maintenance Staff']) ||
+        hasStaffPerm('manage_rooms') ||
+        hasStaffPerm('update_room_status')
+      );
+      allow delete: if isValidId(roomId) && (isManagerOrAdmin() || hasStaffPerm('manage_rooms'));
     }
 
     match /roomCategories/{catId} {
       allow get: if isStaff() && isValidId(catId);
       allow list: if isStaff();
-      allow create, update: if isStaff() && isValidId(catId);
-      allow delete: if isManagerOrAdmin() && isValidId(catId);
+      allow create, update, delete: if isValidId(catId) && (isManagerOrAdmin() || hasStaffPerm('manage_rooms'));
     }
 
     match /propertyAmenities/{amenityId} {
       allow get: if isStaff() && isValidId(amenityId);
       allow list: if isStaff();
-      allow create, update: if isStaff() && isValidId(amenityId);
-      allow delete: if isManagerOrAdmin() && isValidId(amenityId);
+      allow create, update, delete: if isValidId(amenityId) && (isManagerOrAdmin() || hasStaffPerm('manage_rooms'));
     }
 
     match /propertyCalendar/{docId} {
       allow get: if isStaff() && isValidId(docId);
       allow list: if isStaff();
-      allow create, update: if isStaff() && isValidId(docId);
-      allow delete: if isManagerOrAdmin() && isValidId(docId);
+      allow create, update, delete: if isValidId(docId) && (isManagerOrAdmin() || hasStaffPerm('manage_rooms'));
     }
 
     // ------------------------------------------------------------------
     // Housekeeping, Maintenance & Inventory Collections
     // ------------------------------------------------------------------
     match /housekeepingTasks/{taskId} {
-      allow get: if isStaff() && isValidId(taskId);
-      allow list: if isStaff();
-      allow create, update: if isStaff() && isValidId(taskId);
-      allow delete: if isManagerOrAdmin() && isValidId(taskId);
+      allow get: if isValidId(taskId) && (
+        hasStaffRole(['Receptionist', 'Housekeeping Staff']) ||
+        hasStaffPerm('view_housekeeping') ||
+        hasStaffPerm('manage_housekeeping') ||
+        hasStaffPerm('view_reports')
+      );
+      allow list: if hasStaffRole(['Receptionist', 'Housekeeping Staff']) ||
+        hasStaffPerm('view_housekeeping') ||
+        hasStaffPerm('manage_housekeeping') ||
+        hasStaffPerm('view_reports');
+      allow create: if isValidId(taskId) && (
+        isManagerOrAdmin() ||
+        hasStaffPerm('manage_housekeeping')
+      );
+      allow update: if isValidId(taskId) && (
+        hasStaffRole(['Housekeeping Staff']) ||
+        hasStaffPerm('manage_housekeeping') ||
+        hasStaffPerm('update_housekeeping_tasks')
+      );
+      allow delete: if isValidId(taskId) && (isManagerOrAdmin() || hasStaffPerm('delete_records'));
     }
 
     match /maintenanceTickets/{ticketId} {
-      allow get: if isStaff() && isValidId(ticketId);
-      allow list: if isStaff();
-      allow create, update: if isStaff() && isValidId(ticketId);
-      allow delete: if isManagerOrAdmin() && isValidId(ticketId);
+      allow get: if isValidId(ticketId) && (
+        hasStaffRole(['Receptionist', 'Housekeeping Staff', 'Maintenance Staff']) ||
+        hasStaffPerm('view_maintenance') ||
+        hasStaffPerm('manage_maintenance') ||
+        hasStaffPerm('view_reports')
+      );
+      allow list: if hasStaffRole(['Receptionist', 'Housekeeping Staff', 'Maintenance Staff']) ||
+        hasStaffPerm('view_maintenance') ||
+        hasStaffPerm('manage_maintenance') ||
+        hasStaffPerm('view_reports');
+      allow create, update: if isValidId(ticketId) && (
+        hasStaffRole(['Maintenance Staff']) ||
+        hasStaffPerm('manage_maintenance') ||
+        hasStaffPerm('update_maintenance_tickets')
+      );
+      allow delete: if isValidId(ticketId) && (isManagerOrAdmin() || hasStaffPerm('delete_records'));
     }
 
     match /technicians/{techId} {
-      allow get: if isStaff() && isValidId(techId);
-      allow list: if isStaff();
-      allow create, update: if isStaff() && isValidId(techId);
-      allow delete: if isManagerOrAdmin() && isValidId(techId);
+      allow get: if isValidId(techId) && (hasStaffRole(['Maintenance Staff']) || hasStaffPerm('view_maintenance'));
+      allow list: if hasStaffRole(['Maintenance Staff']) || hasStaffPerm('view_maintenance');
+      allow create, update: if isValidId(techId) && (isManagerOrAdmin() || hasStaffPerm('manage_maintenance'));
+      allow delete: if isValidId(techId) && isManagerOrAdmin();
     }
 
     match /predictiveAlerts/{alertId} {
-      allow get: if isStaff() && isValidId(alertId);
-      allow list: if isStaff();
-      allow create, update: if isStaff() && isValidId(alertId);
-      allow delete: if isManagerOrAdmin() && isValidId(alertId);
+      allow get: if isValidId(alertId) && (hasStaffRole(['Maintenance Staff']) || hasStaffPerm('view_maintenance'));
+      allow list: if hasStaffRole(['Maintenance Staff']) || hasStaffPerm('view_maintenance');
+      allow create, update: if isValidId(alertId) && (hasStaffRole(['Maintenance Staff']) || hasStaffPerm('manage_maintenance'));
+      allow delete: if isValidId(alertId) && isManagerOrAdmin();
     }
 
     match /recentlyResolvedMaintenance/{docId} {
-      allow get: if isStaff() && isValidId(docId);
-      allow list: if isStaff();
-      allow create, update: if isStaff() && isValidId(docId);
-      allow delete: if isManagerOrAdmin() && isValidId(docId);
+      allow get: if isValidId(docId) && (hasStaffRole(['Maintenance Staff']) || hasStaffPerm('view_maintenance'));
+      allow list: if hasStaffRole(['Maintenance Staff']) || hasStaffPerm('view_maintenance');
+      allow create, update: if isValidId(docId) && (hasStaffRole(['Maintenance Staff']) || hasStaffPerm('manage_maintenance'));
+      allow delete: if isValidId(docId) && isManagerOrAdmin();
     }
 
     match /maintenanceVendors/{vendorId} {
-      allow get: if isStaff() && isValidId(vendorId);
-      allow list: if isStaff();
-      allow create, update: if isStaff() && isValidId(vendorId);
-      allow delete: if isManagerOrAdmin() && isValidId(vendorId);
+      allow get: if isValidId(vendorId) && (hasStaffRole(['Maintenance Staff']) || hasStaffPerm('view_maintenance'));
+      allow list: if hasStaffRole(['Maintenance Staff']) || hasStaffPerm('view_maintenance');
+      allow create, update: if isValidId(vendorId) && (isManagerOrAdmin() || hasStaffPerm('manage_maintenance'));
+      allow delete: if isValidId(vendorId) && isManagerOrAdmin();
     }
 
     match /inventoryItems/{itemId} {
-      allow get: if isStaff() && isValidId(itemId);
-      allow list: if isStaff();
-      allow create, update, delete: if isStaff() && isValidId(itemId);
+      allow get: if isValidId(itemId) && (
+        hasStaffRole(['Inventory Manager', 'Accountant']) ||
+        hasStaffPerm('view_inventory') ||
+        hasStaffPerm('manage_inventory') ||
+        hasStaffPerm('view_reports')
+      );
+      allow list: if hasStaffRole(['Inventory Manager', 'Accountant']) ||
+        hasStaffPerm('view_inventory') ||
+        hasStaffPerm('manage_inventory') ||
+        hasStaffPerm('view_reports');
+      allow create, update, delete: if isValidId(itemId) && (
+        hasStaffRole(['Inventory Manager']) ||
+        hasStaffPerm('manage_inventory') ||
+        hasStaffPerm('manage_purchase_orders')
+      );
     }
 
     match /purchaseOrders/{poId} {
-      allow get: if isStaff() && isValidId(poId);
-      allow list: if isStaff();
-      allow create, update: if isStaff() && isValidId(poId);
-      allow delete: if isManagerOrAdmin() && isValidId(poId);
+      allow get: if isValidId(poId) && (
+        hasStaffRole(['Inventory Manager', 'Accountant']) ||
+        hasStaffPerm('view_inventory') ||
+        hasStaffPerm('manage_purchase_orders') ||
+        hasStaffPerm('view_reports')
+      );
+      allow list: if hasStaffRole(['Inventory Manager', 'Accountant']) ||
+        hasStaffPerm('view_inventory') ||
+        hasStaffPerm('manage_purchase_orders') ||
+        hasStaffPerm('view_reports');
+      allow create, update: if isValidId(poId) && (
+        hasStaffRole(['Inventory Manager']) ||
+        hasStaffPerm('manage_purchase_orders')
+      );
+      allow delete: if isValidId(poId) && (isManagerOrAdmin() || hasStaffRole(['Inventory Manager']));
     }
 
     match /inventorySuppliers/{supplierId} {
-      allow get: if isStaff() && isValidId(supplierId);
-      allow list: if isStaff();
-      allow create, update: if isStaff() && isValidId(supplierId);
-      allow delete: if isManagerOrAdmin() && isValidId(supplierId);
+      allow get: if isValidId(supplierId) && (hasStaffRole(['Inventory Manager']) || hasStaffPerm('view_inventory'));
+      allow list: if hasStaffRole(['Inventory Manager']) || hasStaffPerm('view_inventory');
+      allow create, update: if isValidId(supplierId) && (hasStaffRole(['Inventory Manager']) || hasStaffPerm('manage_inventory'));
+      allow delete: if isValidId(supplierId) && isManagerOrAdmin();
     }
 
     match /inventoryAlerts/{alertId} {
-      allow get: if isStaff() && isValidId(alertId);
-      allow list: if isStaff();
-      allow create, update: if isStaff() && isValidId(alertId);
-      allow delete: if isManagerOrAdmin() && isValidId(alertId);
+      allow get: if isValidId(alertId) && (hasStaffRole(['Inventory Manager']) || hasStaffPerm('view_inventory'));
+      allow list: if hasStaffRole(['Inventory Manager']) || hasStaffPerm('view_inventory');
+      allow create, update: if isValidId(alertId) && (hasStaffRole(['Inventory Manager']) || hasStaffPerm('manage_inventory'));
+      allow delete: if isValidId(alertId) && isManagerOrAdmin();
     }
 
     match /inventoryAIInsights/{insightId} {
-      allow get: if isStaff() && isValidId(insightId);
-      allow list: if isStaff();
-      allow create, update, delete: if isStaff() && isValidId(insightId);
+      allow get: if isValidId(insightId) && (hasStaffRole(['Inventory Manager']) || hasStaffPerm('view_inventory'));
+      allow list: if hasStaffRole(['Inventory Manager']) || hasStaffPerm('view_inventory');
+      allow create, update, delete: if isValidId(insightId) && (hasStaffRole(['Inventory Manager']) || hasStaffPerm('manage_inventory'));
     }
 
     // ------------------------------------------------------------------
-    // HR, Payroll & Admin Settings Collections (Manager/Admin Guarded)
+    // HR, Payroll & Admin Settings Collections
     // ------------------------------------------------------------------
     match /staffMembers/{staffId} {
-      allow get: if isStaff() && isValidId(staffId);
-      allow list: if isStaff();
-      allow create, update, delete: if isManagerOrAdmin() && isValidId(staffId);
+      allow get: if isValidId(staffId) && (
+        hasStaffRole(['Receptionist', 'Housekeeping Staff']) ||
+        hasStaffPerm('view_staff') ||
+        hasStaffPerm('manage_staff_hr')
+      );
+      allow list: if hasStaffRole(['Receptionist', 'Housekeeping Staff']) ||
+        hasStaffPerm('view_staff') ||
+        hasStaffPerm('manage_staff_hr');
+      allow create, update, delete: if isValidId(staffId) && (isManagerOrAdmin() || hasStaffPerm('manage_staff_hr'));
     }
 
     match /staffLeaveRequests/{reqId} {
-      allow get: if isStaff() && isValidId(reqId);
-      allow list: if isStaff();
+      allow get: if isValidId(reqId) && (
+        hasStaffRole(['Receptionist', 'Housekeeping Staff']) ||
+        hasStaffPerm('view_staff') ||
+        hasStaffPerm('manage_staff_hr')
+      );
+      allow list: if hasStaffRole(['Receptionist', 'Housekeeping Staff']) ||
+        hasStaffPerm('view_staff') ||
+        hasStaffPerm('manage_staff_hr');
       allow create: if isStaff() && isValidId(reqId);
-      allow update, delete: if isManagerOrAdmin() && isValidId(reqId);
+      allow update, delete: if isValidId(reqId) && (isManagerOrAdmin() || hasStaffPerm('manage_staff_hr'));
     }
 
     match /staffWeeklyCoverage/{dayId} {
-      allow get: if isStaff() && isValidId(dayId);
-      allow list: if isStaff();
-      allow create, update: if isManagerOrAdmin() && isValidId(dayId);
+      allow get: if isValidId(dayId) && (isManagerOrAdmin() || hasStaffPerm('view_staff'));
+      allow list: if isManagerOrAdmin() || hasStaffPerm('view_staff');
+      allow create, update: if isValidId(dayId) && (isManagerOrAdmin() || hasStaffPerm('manage_staff_hr'));
       allow delete: if isAdmin() && isValidId(dayId);
     }
 
     match /staffShiftPlans/{shiftId} {
-      allow get: if isStaff() && isValidId(shiftId);
-      allow list: if isStaff();
-      allow create, update: if isManagerOrAdmin() && isValidId(shiftId);
+      allow get: if isValidId(shiftId) && (isManagerOrAdmin() || hasStaffPerm('view_staff'));
+      allow list: if isManagerOrAdmin() || hasStaffPerm('view_staff');
+      allow create, update: if isValidId(shiftId) && (isManagerOrAdmin() || hasStaffPerm('manage_staff_hr'));
       allow delete: if isAdmin() && isValidId(shiftId);
     }
 
     match /staffTasks/{taskId} {
-      allow get: if isStaff() && isValidId(taskId);
-      allow list: if isStaff();
-      allow create, update: if isStaff() && isValidId(taskId);
+      allow get: if isValidId(taskId) && (isManagerOrAdmin() || hasStaffPerm('view_staff'));
+      allow list: if isManagerOrAdmin() || hasStaffPerm('view_staff');
+      allow create, update: if isValidId(taskId) && (isManagerOrAdmin() || hasStaffPerm('manage_staff_hr'));
       allow delete: if isManagerOrAdmin() && isValidId(taskId);
     }
 
     match /staffAIInsights/{insightId} {
-      allow get: if isStaff() && isValidId(insightId);
-      allow list: if isStaff();
-      allow create, update: if isStaff() && isValidId(insightId);
+      allow get: if isValidId(insightId) && (isManagerOrAdmin() || hasStaffPerm('view_staff'));
+      allow list: if isManagerOrAdmin() || hasStaffPerm('view_staff');
+      allow create, update: if isValidId(insightId) && (isManagerOrAdmin() || hasStaffPerm('manage_staff_hr'));
       allow delete: if isManagerOrAdmin() && isValidId(insightId);
     }
 
     match /billingConfig/{docId} {
-      allow get: if isStaff() && isValidId(docId);
-      allow list: if isStaff();
-      allow create, update: if isManagerOrAdmin() && isValidId(docId);
+      allow get: if isValidId(docId) && (
+        hasStaffRole(['Accountant', 'Receptionist']) ||
+        hasStaffPerm('view_billing') ||
+        hasStaffPerm('manage_billing')
+      );
+      allow list: if hasStaffRole(['Accountant', 'Receptionist']) ||
+        hasStaffPerm('view_billing') ||
+        hasStaffPerm('manage_billing');
+      allow create, update: if isValidId(docId) && (isManagerOrAdmin() || hasStaffRole(['Accountant']) || hasStaffPerm('manage_billing'));
       allow delete: if false;
     }
 
     match /settings/{docId} {
       allow get: if isStaff() && isValidId(docId);
       allow list: if isStaff();
-      allow create, update: if isManagerOrAdmin() && isValidId(docId);
+      allow create, update: if isValidId(docId) && (isAdmin() || hasStaffPerm('manage_settings'));
       allow delete: if false;
     }
 
     match /reviewConfig/{docId} {
-      allow get: if isStaff() && isValidId(docId);
-      allow list: if isStaff();
-      allow create, update: if isManagerOrAdmin() && isValidId(docId);
+      allow get: if isValidId(docId) && (isManagerOrAdmin() || hasStaffPerm('manage_reviews'));
+      allow list: if isManagerOrAdmin() || hasStaffPerm('manage_reviews');
+      allow create, update: if isValidId(docId) && (isManagerOrAdmin() || hasStaffPerm('manage_reviews'));
       allow delete: if false;
     }
 
@@ -338,57 +582,63 @@ service cloud.firestore {
     // Reviews, WhatsApp & Email Communication Logs
     // ------------------------------------------------------------------
     match /reviews/{reviewId} {
-      allow get: if isStaff() && isValidId(reviewId);
-      allow list: if isStaff();
-      allow create, update: if isStaff() && isValidId(reviewId);
+      allow get: if isValidId(reviewId) && (
+        hasStaffRole(['Receptionist']) ||
+        hasStaffPerm('manage_reviews') ||
+        hasStaffPerm('view_dashboard')
+      );
+      allow list: if hasStaffRole(['Receptionist']) ||
+        hasStaffPerm('manage_reviews') ||
+        hasStaffPerm('view_dashboard');
+      allow create, update: if isValidId(reviewId) && (isManagerOrAdmin() || hasStaffPerm('manage_reviews'));
       allow delete: if isManagerOrAdmin() && isValidId(reviewId);
     }
 
     match /reviewSentimentTopics/{topicId} {
-      allow get: if isStaff() && isValidId(topicId);
-      allow list: if isStaff();
-      allow create, update: if isStaff() && isValidId(topicId);
+      allow get: if isValidId(topicId) && (isManagerOrAdmin() || hasStaffPerm('manage_reviews'));
+      allow list: if isManagerOrAdmin() || hasStaffPerm('manage_reviews');
+      allow create, update: if isValidId(topicId) && (isManagerOrAdmin() || hasStaffPerm('manage_reviews'));
       allow delete: if isManagerOrAdmin() && isValidId(topicId);
     }
 
     match /reviewAIInsights/{insightId} {
-      allow get: if isStaff() && isValidId(insightId);
-      allow list: if isStaff();
-      allow create, update: if isStaff() && isValidId(insightId);
+      allow get: if isValidId(insightId) && (isManagerOrAdmin() || hasStaffPerm('manage_reviews'));
+      allow list: if isManagerOrAdmin() || hasStaffPerm('manage_reviews');
+      allow create, update: if isValidId(insightId) && (isManagerOrAdmin() || hasStaffPerm('manage_reviews'));
       allow delete: if isManagerOrAdmin() && isValidId(insightId);
     }
 
     match /whatsappWorkflows/{wfId} {
-      allow get: if isStaff() && isValidId(wfId);
-      allow list: if isStaff();
-      allow create, update: if isStaff() && isValidId(wfId);
+      allow get: if isValidId(wfId) && (hasStaffRole(['Receptionist']) || hasStaffPerm('manage_whatsapp'));
+      allow list: if hasStaffRole(['Receptionist']) || hasStaffPerm('manage_whatsapp');
+      allow create, update: if isValidId(wfId) && (hasStaffRole(['Receptionist']) || hasStaffPerm('manage_whatsapp'));
       allow delete: if isManagerOrAdmin() && isValidId(wfId);
     }
 
     match /whatsappTemplates/{tmplId} {
-      allow get: if isStaff() && isValidId(tmplId);
-      allow list: if isStaff();
-      allow create, update: if isStaff() && isValidId(tmplId);
+      allow get: if isValidId(tmplId) && (hasStaffRole(['Receptionist']) || hasStaffPerm('manage_whatsapp'));
+      allow list: if hasStaffRole(['Receptionist']) || hasStaffPerm('manage_whatsapp');
+      allow create, update: if isValidId(tmplId) && (hasStaffRole(['Receptionist']) || hasStaffPerm('manage_whatsapp'));
       allow delete: if isManagerOrAdmin() && isValidId(tmplId);
     }
 
     match /whatsappInsights/{insightId} {
-      allow get: if isStaff() && isValidId(insightId);
-      allow list: if isStaff();
-      allow create, update, delete: if isStaff() && isValidId(insightId);
+      allow get: if isValidId(insightId) && (hasStaffRole(['Receptionist']) || hasStaffPerm('manage_whatsapp'));
+      allow list: if hasStaffRole(['Receptionist']) || hasStaffPerm('manage_whatsapp');
+      allow create, update, delete: if isValidId(insightId) && (isManagerOrAdmin() || hasStaffPerm('manage_whatsapp'));
     }
 
     match /whatsappLogs/{logId} {
-      allow get: if isStaff() && isValidId(logId);
-      allow list: if isStaff();
-      allow create, update: if isStaff() && isValidId(logId);
+      allow get: if isValidId(logId) && (hasStaffRole(['Receptionist']) || hasStaffPerm('manage_whatsapp'));
+      allow list: if hasStaffRole(['Receptionist']) || hasStaffPerm('manage_whatsapp');
+      allow create, update: if isValidId(logId) && (hasStaffRole(['Receptionist']) || hasStaffPerm('manage_whatsapp'));
       allow delete: if isAdmin() && isValidId(logId);
     }
 
     match /emailLogs/{logId} {
-      allow get: if isStaff() && isValidId(logId);
-      allow list: if isStaff();
-      allow create, update: if isStaff() && isValidId(logId);
+      allow get: if isValidId(logId) && (hasStaffRole(['Receptionist', 'Accountant']) || hasStaffPerm('manage_billing') || hasStaffPerm('manage_whatsapp'));
+      allow list: if hasStaffRole(['Receptionist', 'Accountant']) || hasStaffPerm('manage_billing') || hasStaffPerm('manage_whatsapp');
+      allow create, update: if isValidId(logId) && (hasStaffRole(['Receptionist', 'Accountant']) || hasStaffPerm('manage_billing'));
       allow delete: if isAdmin() && isValidId(logId);
     }
 

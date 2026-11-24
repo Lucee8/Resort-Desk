@@ -12,6 +12,7 @@ import {
   Sparkles,
   UserCheck,
   Building,
+  ShieldCheck,
 } from 'lucide-react';
 import {
   StaffMember,
@@ -35,6 +36,7 @@ import StaffPerformanceTab from './staff/StaffPerformanceTab';
 import StaffPayrollTab from './staff/StaffPayrollTab';
 import StaffTasksTab from './staff/StaffTasksTab';
 import StaffAIWorkspaceTab from './staff/StaffAIWorkspaceTab';
+import StaffAccountsTab from './staff/StaffAccountsTab';
 
 import StaffProfileModal from './staff/StaffProfileModal';
 import AddStaffModal from './staff/AddStaffModal';
@@ -53,9 +55,14 @@ export default function StaffManagementView({
   initialTab = 'overview',
   triggerToast,
 }: StaffManagementViewProps) {
-  const { user, firestoreStatus } = useAuth();
+  const { user, staffProfile, role, firestoreStatus, hasPermission } = useAuth();
+  const canManageAccounts = hasPermission('manage_staff_accounts');
+  const canManageHR = hasPermission('manage_staff_hr');
   const operatorName =
-    user?.displayName || user?.email?.split('@')[0] || 'Mykonos Manager';
+    staffProfile?.fullName ||
+    user?.displayName ||
+    user?.email?.split('@')[0] ||
+    'Mykonos Manager';
 
   const [currentTab, setCurrentTab] = useState<string>(initialTab);
 
@@ -515,7 +522,7 @@ export default function StaffManagementView({
               <p className="text-xs font-bold text-slate-900 leading-tight max-w-[120px] truncate">
                 {operatorName}
               </p>
-              <p className="text-[10px] text-slate-500 leading-tight">Resort Ops</p>
+              <p className="text-[10px] text-slate-500 leading-tight">{role || 'Resort Ops'}</p>
             </div>
           </div>
         </div>
@@ -548,28 +555,32 @@ export default function StaffManagementView({
             <span>Export Staff</span>
           </button>
 
-          <button
-            id="btn-manage-shifts-header"
-            type="button"
-            onClick={() => setCurrentTab('shifts')}
-            className="px-3.5 py-2 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer shadow-2xs"
-          >
-            <Calendar className="w-3.5 h-3.5 text-slate-500" />
-            <span>Manage Shifts</span>
-          </button>
+          {canManageHR && (
+            <>
+              <button
+                id="btn-manage-shifts-header"
+                type="button"
+                onClick={() => setCurrentTab('shifts')}
+                className="px-3.5 py-2 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer shadow-2xs"
+              >
+                <Calendar className="w-3.5 h-3.5 text-slate-500" />
+                <span>Manage Shifts</span>
+              </button>
 
-          <button
-            id="btn-add-staff-header"
-            type="button"
-            onClick={() => {
-              setStaffToEdit(null);
-              setIsAddStaffOpen(true);
-            }}
-            className="px-4 py-2 bg-teal-800 hover:bg-teal-900 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all shadow-sm cursor-pointer"
-          >
-            <Plus className="w-4 h-4 text-teal-200" />
-            <span>Add Staff Member</span>
-          </button>
+              <button
+                id="btn-add-staff-header"
+                type="button"
+                onClick={() => {
+                  setStaffToEdit(null);
+                  setIsAddStaffOpen(true);
+                }}
+                className="px-4 py-2 bg-teal-800 hover:bg-teal-900 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all shadow-sm cursor-pointer"
+              >
+                <Plus className="w-4 h-4 text-teal-200" />
+                <span>Add Staff Member</span>
+              </button>
+            </>
+          )}
         </div>
       </div>
 
@@ -577,6 +588,16 @@ export default function StaffManagementView({
       <div className="flex items-center gap-1.5 border-b border-slate-200/80 pb-0 overflow-x-auto">
         {[
           { id: 'overview', label: 'Overview', icon: Users },
+          ...(canManageAccounts
+            ? [
+                {
+                  id: 'accounts',
+                  label: 'Accounts & Access (RBAC)',
+                  icon: ShieldCheck,
+                  highlight: true,
+                },
+              ]
+            : []),
           { id: 'directory', label: 'Staff Directory', count: filteredStaff.length },
           { id: 'attendance', label: 'Attendance & Logs', icon: UserCheck },
           { id: 'shifts', label: 'Shift Planner & Coverage', icon: Calendar },
@@ -738,6 +759,10 @@ export default function StaffManagementView({
             onAssignTask={(t) => void handleAssignTask(t)}
             triggerToast={triggerToast}
           />
+        )}
+
+        {currentTab === 'accounts' && canManageAccounts && (
+          <StaffAccountsTab triggerToast={triggerToast} />
         )}
 
         {currentTab === 'ai' && (

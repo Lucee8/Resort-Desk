@@ -50,10 +50,16 @@ export default function HousekeepingView({
   initialFilter,
   navigationKey,
 }: HousekeepingViewProps) {
-  const { user } = useAuth();
+  const { user, staffProfile, role, hasPermission } = useAuth();
+  const canManageHousekeeping = hasPermission('manage_housekeeping');
+  const canUpdateTasks =
+    hasPermission('update_housekeeping_tasks') || canManageHousekeeping;
   const operatorName =
-    user?.displayName || user?.email?.split('@')[0] || 'Mykonos Staff';
-  const operatorRole = user?.email ? 'FRONT DESK / OPS' : 'RESORT OPS';
+    staffProfile?.fullName ||
+    user?.displayName ||
+    user?.email?.split('@')[0] ||
+    'Mykonos Staff';
+  const operatorRole = (role || (user?.email ? 'RESORT STAFF' : 'RESORT OPS')).toUpperCase();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedRoomId, setSelectedRoomId] = useState<string>(tasks[0]?.id || '');
@@ -202,6 +208,10 @@ export default function HousekeepingView({
   };
 
   const handleToggleChecklist = async (taskId: string, itemId: string) => {
+    if (!canUpdateTasks) {
+      triggerToast('You do not have permission to update housekeeping checklists.');
+      return;
+    }
     const task = tasks.find((t) => t.id === taskId);
     if (!task) return;
 
@@ -243,6 +253,10 @@ export default function HousekeepingView({
   };
 
   const handleAssignStaff = async (taskId: string, staffName: string) => {
+    if (!canManageHousekeeping) {
+      triggerToast('Only Housekeeping Supervisors or Managers can assign rooms.');
+      return;
+    }
     const staff = hkStaff.find((s) => s.name === staffName);
     const task = tasks.find((t) => t.id === taskId);
     if (!task) return;
@@ -259,6 +273,10 @@ export default function HousekeepingView({
   };
 
   const handleAssignAll = async () => {
+    if (!canManageHousekeeping) {
+      triggerToast('Only Housekeeping Supervisors or Managers can batch-assign rooms.');
+      return;
+    }
     const unassigned = tasks.filter((t) => !t.assignedTo && t.status !== 'Verified');
     if (unassigned.length === 0) {
       triggerToast('All active housekeeping rooms are already assigned.');
@@ -297,6 +315,10 @@ export default function HousekeepingView({
   };
 
   const handleApproveVerification = async (taskId: string) => {
+    if (!canManageHousekeeping) {
+      triggerToast('Manager or Supervisor permission is required to verify rooms ready.');
+      return;
+    }
     const task = tasks.find((t) => t.id === taskId);
     if (!task) return;
 
@@ -354,6 +376,10 @@ export default function HousekeepingView({
 
   const handleCreateNewTask = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!canManageHousekeeping) {
+      triggerToast('Only Managers or Supervisors can log new cleaning jobs.');
+      return;
+    }
     if (!newRoomNo.trim()) return;
 
     const formattedRoom = newRoomNo.toLowerCase().includes('room') ||
@@ -611,25 +637,29 @@ export default function HousekeepingView({
                 ))}
               </div>
 
-              <button
-                type="button"
-                disabled={isSaving}
-                onClick={() => void handleAssignAll()}
-                className="px-3 py-1.5 bg-teal-800 hover:bg-teal-900 disabled:opacity-60 text-white font-bold text-[10px] rounded-xl flex items-center gap-1 shadow-xs transition-colors cursor-pointer"
-                title="Automatically assign idle staff to dirty rooms"
-              >
-                <Sparkles className="w-3.5 h-3.5 text-amber-300" />
-                <span>Assign All</span>
-              </button>
+              {canManageHousekeeping && (
+                <>
+                  <button
+                    type="button"
+                    disabled={isSaving}
+                    onClick={() => void handleAssignAll()}
+                    className="px-3 py-1.5 bg-teal-800 hover:bg-teal-900 disabled:opacity-60 text-white font-bold text-[10px] rounded-xl flex items-center gap-1 shadow-xs transition-colors cursor-pointer"
+                    title="Automatically assign idle staff to dirty rooms"
+                  >
+                    <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                    <span>Assign All</span>
+                  </button>
 
-              <button
-                type="button"
-                onClick={() => setShowNewTaskModal(true)}
-                className="p-1.5 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl text-slate-600 hover:text-slate-800 transition-colors cursor-pointer"
-                title="Log New Room Cleaning Job"
-              >
-                <Plus className="w-4 h-4" />
-              </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowNewTaskModal(true)}
+                    className="p-1.5 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl text-slate-600 hover:text-slate-800 transition-colors cursor-pointer"
+                    title="Log New Room Cleaning Job"
+                  >
+                    <Plus className="w-4 h-4" />
+                  </button>
+                </>
+              )}
             </div>
           </div>
 
@@ -730,7 +760,7 @@ export default function HousekeepingView({
                                     {task.assignedTo}
                                   </span>
                                 </>
-                              ) : (
+                              ) : canManageHousekeeping ? (
                                 <select
                                   onClick={(e) => e.stopPropagation()}
                                   onChange={(e) => {
@@ -750,6 +780,10 @@ export default function HousekeepingView({
                                     </option>
                                   ))}
                                 </select>
+                              ) : (
+                                <span className="text-[9px] text-slate-400 font-semibold italic">
+                                  Unassigned
+                                </span>
                               )}
                             </div>
 
@@ -766,7 +800,7 @@ export default function HousekeepingView({
                                 </div>
                               )}
 
-                              {task.status === 'Cleaned' && (
+                              {task.status === 'Cleaned' && canManageHousekeeping && (
                                 <button
                                   type="button"
                                   onClick={(e) => {
@@ -1001,23 +1035,25 @@ export default function HousekeepingView({
               </div>
 
               <div className="mt-6 pt-4 border-t border-emerald-900 space-y-2">
-                <button
-                  type="button"
-                  onClick={() => void handleApproveVerification(selectedTask.id)}
-                  disabled={selectedTask.status === 'Verified' || isSaving}
-                  className={`w-full py-2.5 rounded-xl font-extrabold text-xs shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer ${
-                    selectedTask.status === 'Verified'
-                      ? 'bg-emerald-800/40 text-emerald-400 border border-emerald-800/40 cursor-not-allowed'
-                      : 'bg-white text-emerald-950 hover:bg-teal-50'
-                  }`}
-                >
-                  <UserCheck className="w-4 h-4" />
-                  <span>
-                    {selectedTask.status === 'Verified'
-                      ? 'Room Verified Ready ✓'
-                      : 'Mark as Verified'}
-                  </span>
-                </button>
+                {canManageHousekeeping && (
+                  <button
+                    type="button"
+                    onClick={() => void handleApproveVerification(selectedTask.id)}
+                    disabled={selectedTask.status === 'Verified' || isSaving}
+                    className={`w-full py-2.5 rounded-xl font-extrabold text-xs shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer ${
+                      selectedTask.status === 'Verified'
+                        ? 'bg-emerald-800/40 text-emerald-400 border border-emerald-800/40 cursor-not-allowed'
+                        : 'bg-white text-emerald-950 hover:bg-teal-50'
+                    }`}
+                  >
+                    <UserCheck className="w-4 h-4" />
+                    <span>
+                      {selectedTask.status === 'Verified'
+                        ? 'Room Verified Ready ✓'
+                        : 'Mark as Verified'}
+                    </span>
+                  </button>
+                )}
 
                 <button
                   type="button"

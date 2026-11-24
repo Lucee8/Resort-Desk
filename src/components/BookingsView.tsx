@@ -5,7 +5,6 @@ import {
   AlertCircle,
   Loader2,
   Database,
-  ShieldAlert,
   Ban,
   X,
 } from 'lucide-react';
@@ -77,7 +76,10 @@ export default function BookingsView({
   initialSearchQuery,
   navigationKey,
 }: BookingsViewProps) {
-  const { firestoreStatus, openAuthModal } = useAuth();
+  const { firestoreStatus, hasPermission } = useAuth();
+  const canManageBookings = hasPermission('manage_bookings');
+  const canCheckInOut = hasPermission('checkin_checkout');
+  const canSeedData = hasPermission('seed_data');
   const todayISO = getTodayISO();
 
   // Desktop View & Filter States
@@ -209,11 +211,13 @@ export default function BookingsView({
     [bookings, selectedBookingId]
   );
 
-  // Guard writes when Firestore denies access
-  const ensureFirestoreWritable = () => {
+  // Guard writes when user lacks permission or Firestore denies access
+  const ensureFirestoreWritable = (action: 'manage_bookings' | 'checkin_checkout' = 'manage_bookings') => {
+    if (!hasPermission(action)) {
+      throw new Error('Your staff role does not have permission to perform this reservation action.');
+    }
     if (firestoreStatus === 'permission-denied') {
-      openAuthModal();
-      throw new Error('Staff sign-in or Firestore rule permission required before saving changes.');
+      throw new Error('Active staff permissions required in Cloud Firestore before saving changes.');
     }
   };
 
@@ -222,7 +226,7 @@ export default function BookingsView({
     room: RoomUnit,
     sendWhatsApp: boolean
   ) => {
-    ensureFirestoreWritable();
+    ensureFirestoreWritable('manage_bookings');
     if (editingBooking) {
       const saved = await editReservationAtomic(booking, room);
       setSelectedBookingId(saved.id);
@@ -240,7 +244,7 @@ export default function BookingsView({
 
   const handleCheckIn = async (booking: Booking) => {
     try {
-      ensureFirestoreWritable();
+      ensureFirestoreWritable('checkin_checkout');
       await checkInBookingInFirestore(booking);
       triggerToast(`Checked in ${booking.guestName} to ${booking.roomNumber}`);
     } catch (err) {
@@ -250,7 +254,7 @@ export default function BookingsView({
 
   const handleCheckOut = async (booking: Booking) => {
     try {
-      ensureFirestoreWritable();
+      ensureFirestoreWritable('checkin_checkout');
       await checkOutBookingInFirestore(booking);
       triggerToast(
         `Checked out ${booking.guestName} · ${booking.roomNumber} queued for Housekeeping turnover.`
@@ -271,6 +275,10 @@ export default function BookingsView({
   };
 
   const handleRequestCancel = async (booking: Booking) => {
+    if (!canManageBookings) {
+      triggerToast('Your staff role does not allow cancelling bookings.');
+      return;
+    }
     setCancelConfirmBooking(booking);
   };
 
@@ -341,29 +349,6 @@ export default function BookingsView({
 
   return (
     <div id="bookings-module-root" className="w-full max-w-[1440px] mx-auto font-sans">
-      {/* Status / Error Banners */}
-      {firestoreStatus === 'permission-denied' && (
-        <div className="mb-4 p-4 rounded-2xl bg-amber-50 border border-amber-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div className="flex items-start gap-2.5 text-xs text-amber-950">
-            <ShieldAlert className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
-            <div>
-              <p className="font-extrabold">Firestore Permission Required</p>
-              <p className="text-amber-800 mt-0.5">
-                Sign in with your Firebase staff account to read and persist live reservations in
-                project <span className="font-mono font-bold">resortdesk-mykonos</span>.
-              </p>
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={openAuthModal}
-            className="px-4 py-2 rounded-xl bg-[#004B38] text-white text-xs font-bold shrink-0 cursor-pointer"
-          >
-            Staff Sign-In
-          </button>
-        </div>
-      )}
-
       {errorMsg && firestoreStatus !== 'permission-denied' && (
         <div className="mb-4 p-3.5 rounded-2xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-semibold flex items-center gap-2">
           <AlertCircle className="w-4 h-4 shrink-0" />
@@ -389,9 +374,11 @@ export default function BookingsView({
                   <h2 className="text-2xl font-extrabold text-[#17221F] tracking-tight">
                     Bookings &amp; Reservations
                   </h2>
-                  <span className="px-2.5 py-0.5 rounded-full bg-[#B7F2DC]/60 text-[#004B38] text-[10px] font-bold">
-                    {firestoreStatus === 'connected' ? 'Live Firestore Sync' : 'Session View'}
-                  </span>
+                  {firestoreStatus === 'connected' && (
+                    <span className="px-2.5 py-0.5 rounded-full bg-[#B7F2DC]/60 text-[#004B38] text-[10px] font-bold">
+                      Live Firestore Sync
+                    </span>
+                  )}
                 </div>
                 <p className="text-xs text-[#777F7B] font-medium mt-0.5">
                   Mykonos Cottage, Tarkarli · Manage stays, cottage allocations &amp; GST folios
@@ -399,30 +386,35 @@ export default function BookingsView({
               </div>
 
               <div className="flex items-center gap-2.5">
-                {bookings.length === 0 && firestoreStatus === 'connected' && onSeedStarterData && (
+                {bookings.length === 0 &&
+                  firestoreStatus === 'connected' &&
+                  canSeedData &&
+                  onSeedStarterData && (
+                    <button
+                      type="button"
+                      disabled={seeding}
+                      onClick={handleSeedClick}
+                      className="px-3.5 py-2.5 rounded-xl border border-[#E9ECE9] bg-white hover:bg-[#F7F6F3] text-xs font-bold text-[#004B38] flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <Database className="w-3.5 h-3.5" />
+                      <span>{seeding ? 'Initializing...' : 'Load Starter Dataset'}</span>
+                    </button>
+                  )}
+
+                {canManageBookings && (
                   <button
                     type="button"
-                    disabled={seeding}
-                    onClick={handleSeedClick}
-                    className="px-3.5 py-2.5 rounded-xl border border-[#E9ECE9] bg-white hover:bg-[#F7F6F3] text-xs font-bold text-[#004B38] flex items-center gap-1.5 cursor-pointer"
+                    onClick={() => {
+                      setEditingBooking(null);
+                      setPrefillSlot(null);
+                      setShowReservationModal(true);
+                    }}
+                    className="px-4 py-2.5 rounded-xl bg-[#004B38] hover:bg-[#003D2E] text-white text-xs font-bold flex items-center gap-2 shadow-sm cursor-pointer"
                   >
-                    <Database className="w-3.5 h-3.5" />
-                    <span>{seeding ? 'Initializing...' : 'Load Starter Dataset'}</span>
+                    <Plus className="w-4 h-4 text-[#B7F2DC]" />
+                    <span>New Reservation</span>
                   </button>
                 )}
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    setEditingBooking(null);
-                    setPrefillSlot(null);
-                    setShowReservationModal(true);
-                  }}
-                  className="px-4 py-2.5 rounded-xl bg-[#004B38] hover:bg-[#003D2E] text-white text-xs font-bold flex items-center gap-2 shadow-sm cursor-pointer"
-                >
-                  <Plus className="w-4 h-4 text-[#B7F2DC]" />
-                  <span>New Reservation</span>
-                </button>
               </div>
             </div>
 
@@ -463,18 +455,20 @@ export default function BookingsView({
                   with 7 cottages and sample stays.
                 </p>
                 <div className="flex items-center gap-2.5 mt-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setEditingBooking(null);
-                      setPrefillSlot(null);
-                      setShowReservationModal(true);
-                    }}
-                    className="px-4 py-2 rounded-xl bg-[#004B38] text-white text-xs font-bold cursor-pointer"
-                  >
-                    + Create Reservation
-                  </button>
-                  {firestoreStatus === 'connected' && onSeedStarterData && (
+                  {canManageBookings && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditingBooking(null);
+                        setPrefillSlot(null);
+                        setShowReservationModal(true);
+                      }}
+                      className="px-4 py-2 rounded-xl bg-[#004B38] text-white text-xs font-bold cursor-pointer"
+                    >
+                      + Create Reservation
+                    </button>
+                  )}
+                  {firestoreStatus === 'connected' && canSeedData && onSeedStarterData && (
                     <button
                       type="button"
                       disabled={seeding}

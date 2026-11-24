@@ -1573,3 +1573,78 @@ export interface EmailLogItem {
   createdAtISO: string;
 }
 
+// ----------------------------------------------------
+// ROLE-BASED ACCESS CONTROL (RBAC) & AUTH TYPES
+// ----------------------------------------------------
+
+export type StaffAccountRole =
+  | 'Administrator'
+  | 'General Manager'
+  | 'Receptionist'
+  | 'Housekeeping Staff'
+  | 'Maintenance Staff'
+  | 'Accountant'
+  | 'Inventory Manager';
+
+export type AppModuleId =
+  | 'dashboard'
+  | 'bookings'
+  | 'whatsapp'
+  | 'reviews'
+  | 'reports'
+  | 'guests'
+  | 'rooms'
+  | 'housekeeping'
+  | 'maintenance'
+  | 'inventory'
+  | 'staff'
+  | 'billing'
+  | 'settings';
+
+export type PermissionAction =
+  | 'view_dashboard'
+  | 'manage_bookings'
+  | 'checkin_checkout'
+  | 'view_guests'
+  | 'manage_guests'
+  | 'view_billing'
+  | 'manage_billing'
+  | 'process_refunds'
+  | 'view_rooms'
+  | 'manage_rooms'
+  | 'update_room_status'
+  | 'view_housekeeping'
+  | 'manage_housekeeping'
+  | 'update_housekeeping_tasks'
+  | 'view_maintenance'
+  | 'manage_maintenance'
+  | 'update_maintenance_tickets'
+  | 'view_inventory'
+  | 'manage_inventory'
+  | 'manage_purchase_orders'
+  | 'manage_whatsapp'
+  | 'manage_reviews'
+  | 'view_reports'
+  | 'export_reports'
+  | 'view_staff'
+  | 'manage_staff_hr'
+  | 'manage_staff_accounts'
+  | 'manage_roles'
+  | 'manage_settings'
+  | 'delete_records'
+  | 'seed_data';
+
+export interface StaffAccountProfile {
+  uid: string;
+  fullName: string;
+  email: string;
+  phone: string;
+  role: StaffAccountRole;
+  permissions: PermissionAction[];
+  department: StaffDepartment | string;
+  isActive: boolean;
+  profileImage?: string;
+  createdAt: string;
+  updatedAt: string;
+  createdByUid?: string;
+}

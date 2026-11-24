@@ -47,6 +47,7 @@ import {
   CloudDispatchResponse,
   sendWhatsAppViaCloudAPI,
 } from '../../services/messagingService';
+import { useAuth } from '../../context/AuthContext';
 
 interface BillingViewProps {
   invoices: BillingInvoice[];
@@ -67,6 +68,10 @@ export default function BillingView({
   initialStatusFilter,
   navigationKey,
 }: BillingViewProps) {
+  const { hasPermission } = useAuth();
+  const canManageBilling = hasPermission('manage_billing');
+  const canProcessRefunds = hasPermission('process_refunds');
+
   const notify = (msg: string) => {
     if (triggerToast) {
       triggerToast(msg);
@@ -248,6 +253,10 @@ export default function BillingView({
   };
 
   const handleOpenRecordPayment = (invoice: BillingInvoice) => {
+    if (!canManageBilling) {
+      notify('Your role does not include billing payment collection.');
+      return;
+    }
     setSelectedInvoice(invoice);
     setIsRecordPaymentModalOpen(true);
   };
@@ -258,17 +267,27 @@ export default function BillingView({
     method: string,
     refId: string
   ) => {
+    if (!canManageBilling) {
+      throw new Error('Your role does not allow recording invoice payments.');
+    }
     const target = invoices.find((i) => i.id === invoiceId);
     if (!target) throw new Error('Invoice record not found.');
     await recordBillingInvoicePaymentAtomic(target, amount, method, refId);
   };
 
   const handleOpenProcessRefund = (invoice: BillingInvoice) => {
+    if (!canProcessRefunds) {
+      notify('Refund processing requires Accountant, General Manager, or Administrator permission.');
+      return;
+    }
     setSelectedInvoice(invoice);
     setIsRefundModalOpen(true);
   };
 
   const handleConfirmRefund = async (invoiceId: string, refundAmt: number, reason: string) => {
+    if (!canProcessRefunds) {
+      throw new Error('Your role does not allow processing refunds.');
+    }
     const target = invoices.find((i) => i.id === invoiceId);
     if (!target) throw new Error('Invoice record not found.');
     await processBillingRefundAtomic(target, refundAmt, reason);
@@ -424,7 +443,13 @@ export default function BillingView({
     >
       <BillingHeader
         onExportCSV={handleExportCSV}
-        onCreateInvoice={() => setIsCreateModalOpen(true)}
+        onCreateInvoice={() => {
+          if (!canManageBilling) {
+            notify('Your role does not allow creating new invoices.');
+            return;
+          }
+          setIsCreateModalOpen(true);
+        }}
       />
 
       <BillingKPICards

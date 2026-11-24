@@ -5,7 +5,6 @@ import {
   Brush,
   X,
   Layers,
-  ShieldAlert,
   Database,
   Loader2,
   AlertCircle,
@@ -32,11 +31,16 @@ import ReviewsManagementView from './components/ReviewsManagementView';
 import WhatsAppAutomationView from './components/WhatsAppAutomationView';
 import BillingView from './components/billing/BillingView';
 import SettingsView from './components/settings/SettingsView';
+import AnalyticsReportsView from './components/AnalyticsReportsView';
 import NewReservationModal from './components/bookings/NewReservationModal';
 import StaffAuthModal from './components/auth/StaffAuthModal';
 import FirebaseConfigErrorScreen from './components/auth/FirebaseConfigErrorScreen';
+import LoginPage from './components/auth/LoginPage';
+import UnauthorizedAccessView from './components/auth/UnauthorizedAccessView';
+import { ProtectedRoute, RoleGuard } from './components/auth/RouteGuards';
 
 import { useAuth } from './context/AuthContext';
+import { useRouter } from './context/RouterContext';
 import { resortDetails } from './data';
 import { initialSettingsData } from './data/settingsData';
 
@@ -97,21 +101,31 @@ import {
   ResortDeskSettings,
   OccupancyDay,
   ResortStats,
+  AppModuleId,
 } from './types';
 
 export default function App() {
   const {
     user,
+    staffProfile,
+    role,
+    authLoading,
+    accountStatus,
+    defaultRoute,
+    defaultModule,
+    canAccessModule,
+    hasPermission,
     firebaseConfigured,
-    configError,
     firestoreStatus,
-    firestoreMessage,
     openAuthModal,
+    signOut,
     recheckFirestore,
   } = useAuth();
+  const { currentPath, currentRouteTarget, navigate, navigateToModuleRoute } = useRouter();
 
-  // Navigation & mobile drawer state
-  const [activeTab, setActiveTab] = useState<string>('dashboard');
+  // Active tab mirrors current URL route
+  const activeTab: AppModuleId =
+    currentRouteTarget === 'login' ? defaultModule : currentRouteTarget;
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState<boolean>(false);
 
   // Deep navigation filter states
@@ -175,8 +189,33 @@ export default function App() {
     }, 4500);
   };
 
-  // Subscribe to Firestore collections when connected
+  // Redirect authenticated active staff away from /login or away from root '/' when role lands elsewhere
   useEffect(() => {
+    if (!firebaseConfigured || authLoading) return;
+    if (accountStatus === 'active') {
+      if (currentPath === '/login') {
+        navigate(defaultRoute, { replace: true });
+      } else if (currentPath === '/' && defaultModule !== 'dashboard' && !canAccessModule('dashboard')) {
+        navigate(defaultRoute, { replace: true });
+      }
+    }
+  }, [
+    firebaseConfigured,
+    authLoading,
+    accountStatus,
+    currentPath,
+    defaultRoute,
+    defaultModule,
+    canAccessModule,
+    navigate,
+  ]);
+
+  // Subscribe to Firestore collections scoped strictly to the authenticated active staff role
+  useEffect(() => {
+    if (accountStatus !== 'active') {
+      setDataLoading(false);
+      return;
+    }
     if (firestoreStatus === 'checking') {
       setDataLoading(true);
       return;
@@ -188,65 +227,125 @@ export default function App() {
 
     setDataLoading(true);
     setFirestoreError(null);
-    let initialLoaded = 0;
-    const markOneLoaded = () => {
-      initialLoaded += 1;
-      if (initialLoaded >= 3) {
-        setDataLoading(false);
-      }
-    };
 
     const handleSubError = (err: Error) => {
       setFirestoreError(err.message);
       setDataLoading(false);
     };
 
-    const unsubs = [
-      subscribeBookings(
-        (list) => {
-          setBookings(list);
-          markOneLoaded();
-        },
-        handleSubError
-      ),
-      subscribeRooms(
-        (list) => {
-          setRooms(list);
-          markOneLoaded();
-        },
-        handleSubError
-      ),
-      subscribeGuests(
-        (list) => {
-          setGuestsCRM(list);
-          markOneLoaded();
-        },
-        handleSubError
-      ),
-      subscribeCollection<HousekeepingTask>('housekeepingTasks', setHousekeeping, handleSubError),
-      subscribeCollection<MaintenanceTicket>('maintenanceTickets', setMaintenanceTickets, handleSubError),
-      subscribeCollection<RoomCategory>('roomCategories', setCategories, handleSubError),
-      subscribeCollection<PropertyAmenity>('propertyAmenities', setPropertyAmenities, handleSubError),
-      subscribeBlockedDays(setBlockedDays, handleSubError),
-      subscribeCollection<BillingInvoice>('invoices', setInvoices, handleSubError),
-      subscribeCollection<InventoryItem>('inventoryItems', setInventoryItems, handleSubError),
-      subscribeCollection<StaffMember>('staffMembers', setStaffMembers, handleSubError),
-      subscribeCollection<StaffLeaveRequest>('staffLeaveRequests', setStaffLeaveRequests, handleSubError),
-      subscribeCollection<ReviewItem>('reviews', setReviews, handleSubError),
-      subscribeCollection<WhatsAppMessageLog>('whatsappLogs', setWhatsappLogs, handleSubError),
-      subscribeResortSettings(setSettings, handleSubError),
-      subscribeNotificationsReadState(setReadNotificationIds),
-    ];
+    const unsubs: Array<() => void> = [];
 
-    const fallbackTimer = setTimeout(() => setDataLoading(false), 1800);
+    const canReadBookings =
+      canAccessModule('dashboard') ||
+      canAccessModule('bookings') ||
+      canAccessModule('billing') ||
+      canAccessModule('reports') ||
+      canAccessModule('guests');
+    const canReadRooms =
+      canReadBookings || canAccessModule('rooms') || canAccessModule('housekeeping') || canAccessModule('maintenance');
+    const canReadGuests =
+      canAccessModule('dashboard') || canAccessModule('bookings') || canAccessModule('guests');
+    const canReadHousekeeping =
+      canAccessModule('dashboard') || canAccessModule('housekeeping') || canAccessModule('reports');
+    const canReadMaintenance =
+      canAccessModule('dashboard') ||
+      canAccessModule('maintenance') ||
+      canAccessModule('rooms') ||
+      canAccessModule('housekeeping') ||
+      canAccessModule('reports');
+    const canReadInvoices =
+      canAccessModule('dashboard') ||
+      canAccessModule('billing') ||
+      canAccessModule('guests') ||
+      canAccessModule('reports');
+    const canReadInventory =
+      canAccessModule('inventory') || canAccessModule('reports');
+    const canReadStaff =
+      canAccessModule('dashboard') || canAccessModule('staff') || canAccessModule('housekeeping');
+    const canReadReviews = canAccessModule('dashboard') || canAccessModule('reviews');
+    const canReadWhatsapp = canAccessModule('dashboard') || canAccessModule('whatsapp');
+
+    if (canReadBookings) {
+      unsubs.push(subscribeBookings(setBookings, handleSubError));
+    } else {
+      setBookings([]);
+    }
+
+    if (canReadRooms) {
+      unsubs.push(subscribeRooms(setRooms, handleSubError));
+      unsubs.push(subscribeCollection<RoomCategory>('roomCategories', setCategories, handleSubError));
+      unsubs.push(subscribeCollection<PropertyAmenity>('propertyAmenities', setPropertyAmenities, handleSubError));
+      unsubs.push(subscribeBlockedDays(setBlockedDays, handleSubError));
+    } else {
+      setRooms([]);
+    }
+
+    if (canReadGuests) {
+      unsubs.push(subscribeGuests(setGuestsCRM, handleSubError));
+    } else {
+      setGuestsCRM([]);
+    }
+
+    if (canReadHousekeeping) {
+      unsubs.push(subscribeCollection<HousekeepingTask>('housekeepingTasks', setHousekeeping, handleSubError));
+    } else {
+      setHousekeeping([]);
+    }
+
+    if (canReadMaintenance) {
+      unsubs.push(subscribeCollection<MaintenanceTicket>('maintenanceTickets', setMaintenanceTickets, handleSubError));
+    } else {
+      setMaintenanceTickets([]);
+    }
+
+    if (canReadInvoices) {
+      unsubs.push(subscribeCollection<BillingInvoice>('invoices', setInvoices, handleSubError));
+    } else {
+      setInvoices([]);
+    }
+
+    if (canReadInventory) {
+      unsubs.push(subscribeCollection<InventoryItem>('inventoryItems', setInventoryItems, handleSubError));
+    } else {
+      setInventoryItems([]);
+    }
+
+    if (canReadStaff) {
+      unsubs.push(subscribeCollection<StaffMember>('staffMembers', setStaffMembers, handleSubError));
+      unsubs.push(subscribeCollection<StaffLeaveRequest>('staffLeaveRequests', setStaffLeaveRequests, handleSubError));
+    } else {
+      setStaffMembers([]);
+      setStaffLeaveRequests([]);
+    }
+
+    if (canReadReviews) {
+      unsubs.push(subscribeCollection<ReviewItem>('reviews', setReviews, handleSubError));
+    } else {
+      setReviews([]);
+    }
+
+    if (canReadWhatsapp) {
+      unsubs.push(subscribeCollection<WhatsAppMessageLog>('whatsappLogs', setWhatsappLogs, handleSubError));
+    } else {
+      setWhatsappLogs([]);
+    }
+
+    unsubs.push(subscribeResortSettings(setSettings, handleSubError));
+    unsubs.push(subscribeNotificationsReadState(setReadNotificationIds));
+
+    const fallbackTimer = setTimeout(() => setDataLoading(false), 900);
     return () => {
       clearTimeout(fallbackTimer);
       unsubs.forEach((u) => u());
     };
-  }, [firestoreStatus]);
+  }, [accountStatus, firestoreStatus, canAccessModule]);
 
-  // Seed Mykonos starter dataset on explicit click
+  // Seed Mykonos starter dataset on explicit click (Administrator only)
   const handleSeedStarterDataset = async () => {
+    if (!hasPermission('seed_data')) {
+      triggerToast('Only an Administrator can initialize the starter dataset.');
+      return;
+    }
     if (!firebaseConfigured) {
       triggerToast('Configure VITE_FIREBASE_* environment variables and rebuild first.');
       return;
@@ -265,6 +364,7 @@ export default function App() {
 
   // Navigate to module with optional pre-applied filter/search
   const navigateToModule = (tab: string, options?: OperationsNavigationOptions) => {
+    const targetModule = tab as AppModuleId;
     if (tab === 'bookings') {
       setBookingsNavFilter({
         status: options?.bookingsStatus || 'All',
@@ -278,7 +378,7 @@ export default function App() {
       setBillingNavFilter(options?.billingFilter || 'ALL');
     }
     setNavFilterKey((prev) => prev + 1);
-    setActiveTab(tab);
+    navigateToModuleRoute(targetModule);
     setIsMobileSidebarOpen(false);
   };
 
@@ -591,9 +691,12 @@ export default function App() {
 
   // Handler: ArrivalsCard inline quick arrival -> persists as real Firestore Booking
   const handleAddArrival = async (newArr: Omit<Arrival, 'id' | 'avatar'>) => {
+    if (!hasPermission('manage_bookings')) {
+      triggerToast('Your staff role does not allow creating bookings.');
+      return;
+    }
     if (firestoreStatus !== 'connected') {
-      openAuthModal();
-      triggerToast('Sign in to add arrivals to Firestore.');
+      triggerToast('Active Cloud Firestore connection required to save arrivals.');
       return;
     }
 
@@ -680,6 +783,10 @@ export default function App() {
 
   // Handler: Guest Check-In Action -> Firestore
   const handleCheckInGuest = async (bookingId: string) => {
+    if (!hasPermission('checkin_checkout')) {
+      triggerToast('Your staff role does not allow checking in guests.');
+      return;
+    }
     const targetBooking = bookings.find((b) => b.id === bookingId);
     if (!targetBooking) return;
     try {
@@ -692,6 +799,10 @@ export default function App() {
 
   // Handler: Guest Check-Out Action -> Firestore + auto housekeeping task
   const handleCheckOutGuest = async (bookingId: string) => {
+    if (!hasPermission('checkin_checkout')) {
+      triggerToast('Your staff role does not allow checking out guests.');
+      return;
+    }
     const targetBooking = bookings.find((b) => b.id === bookingId);
     if (!targetBooking) return;
     try {
@@ -704,6 +815,10 @@ export default function App() {
 
   // Handler: AI Assistant Housekeeping Queue Dispatch -> Firestore
   const confirmAiHousekeepingClean = async () => {
+    if (!hasPermission(['manage_housekeeping', 'update_housekeeping_tasks'])) {
+      triggerToast('Your staff role does not allow updating housekeeping tasks.');
+      return;
+    }
     const targets = housekeeping.filter(
       (t) => t.status === 'Pending' || t.status === 'In Progress'
     );
@@ -730,6 +845,10 @@ export default function App() {
 
   // Handler: Review guest bill from Pending Payments / Departures
   const handleReviewBilling = (name: string, amount: number) => {
+    if (!hasPermission('manage_billing')) {
+      triggerToast('Billing settlement requires Receptionist, Accountant, General Manager, or Administrator role.');
+      return;
+    }
     const matchedBooking = bookings.find(
       (b) =>
         b.bookingStatus !== 'Cancelled' &&
@@ -809,7 +928,11 @@ export default function App() {
   }, [departures, searchQuery]);
 
   const showEmptyStarterBanner =
-    firestoreStatus === 'connected' && !dataLoading && rooms.length === 0 && bookings.length === 0;
+    hasPermission('seed_data') &&
+    firestoreStatus === 'connected' &&
+    !dataLoading &&
+    rooms.length === 0 &&
+    bookings.length === 0;
 
   if (!firebaseConfigured) {
     return (
@@ -820,107 +943,98 @@ export default function App() {
     );
   }
 
-  return (
-    <div
-      id="resortdesk-container"
-      className="flex h-screen bg-slate-100 overflow-hidden text-slate-800 font-sans"
-    >
-      {/* Toast banner notifications */}
-      {toastMessage && (
-        <div
-          id="toast-banner"
-          className="fixed top-6 left-1/2 -translate-x-1/2 z-50 bg-teal-950 text-white font-semibold text-xs px-5 py-3 rounded-2xl shadow-xl border border-teal-800 flex items-center gap-2 max-w-[calc(100vw-2rem)] animate-in fade-in slide-in-from-top-4 duration-300"
-        >
-          <Sparkles className="w-4 h-4 text-amber-400 shrink-0" />
-          <span>{toastMessage}</span>
+  // Dedicated /login page route
+  if (currentRouteTarget === 'login') {
+    if (authLoading || accountStatus === 'loading') {
+      return (
+        <div className="min-h-screen w-full bg-[#F7F6F3] flex items-center justify-center">
+          <Loader2 className="w-6 h-6 text-[#004B38] animate-spin" />
         </div>
-      )}
+      );
+    }
+    if (accountStatus === 'disabled') {
+      return (
+        <div className="min-h-screen w-full bg-[#F7F6F3] flex items-center justify-center">
+          <UnauthorizedAccessView variant="disabled" />
+        </div>
+      );
+    }
+    if (accountStatus === 'unauthorized') {
+      return (
+        <div className="min-h-screen w-full bg-[#F7F6F3] flex items-center justify-center">
+          <UnauthorizedAccessView variant="unauthorized" />
+        </div>
+      );
+    }
+    return <LoginPage />;
+  }
 
-      {/* Sidebar navigation */}
-      <Sidebar
-        activeTab={activeTab}
-        setActiveTab={(tab) => navigateToModule(tab)}
-        branding={settings.profile.propertyName || resortDetails.branding}
-        housekeepingCount={pendingHousekeepingCount}
-        maintenanceCount={openMaintenanceCount}
-        inventoryAlertCount={inventoryAlertCount}
-        staffAlertCount={staffAlertCount}
-        reviewsAlertCount={reviewsAlertCount}
-        whatsappCount={whatsappPendingCount}
-        isMobileOpen={isMobileSidebarOpen}
-        onCloseMobile={() => setIsMobileSidebarOpen(false)}
-      />
+  return (
+    <ProtectedRoute>
+      <div
+        id="resortdesk-container"
+        className="flex h-screen bg-slate-100 overflow-hidden text-slate-800 font-sans"
+      >
+        {/* Toast banner notifications */}
+        {toastMessage && (
+          <div
+            id="toast-banner"
+            className="fixed top-6 left-1/2 -translate-x-1/2 z-50 bg-teal-950 text-white font-semibold text-xs px-5 py-3 rounded-2xl shadow-xl border border-teal-800 flex items-center gap-2 max-w-[calc(100vw-2rem)] animate-in fade-in slide-in-from-top-4 duration-300"
+          >
+            <Sparkles className="w-4 h-4 text-amber-400 shrink-0" />
+            <span>{toastMessage}</span>
+          </div>
+        )}
 
-      {/* Main Content Pane */}
-      <div className="flex-1 flex flex-col h-full min-w-0 overflow-hidden">
-        <DashboardHeader
-          searchQuery={searchQuery}
-          setSearchQuery={setSearchQuery}
-          notificationsCount={unreadNotificationsCount}
-          alerts={operationalAlerts}
-          onAlertClick={(tab) => {
-            if (tab) navigateToModule(tab);
-          }}
-          onClearNotifications={handleClearNotifications}
-          onOpenSettings={() => navigateToModule('settings')}
-          onToggleMobileMenu={() => setIsMobileSidebarOpen(true)}
-          propertyName={settings.profile.propertyName || resortDetails.name}
-          propertyLocation={`${settings.profile.city || 'Tarkarli'}, Malvan`}
-          firestoreStatus={firestoreStatus}
-          staffLabel={user ? user.displayName || user.email?.split('@')[0] || 'Staff' : null}
-          onOpenAuthModal={openAuthModal}
+        {/* Sidebar navigation */}
+        <Sidebar
+          activeTab={activeTab}
+          setActiveTab={(tab) => navigateToModule(tab)}
+          branding={settings.profile.propertyName || resortDetails.branding}
+          housekeepingCount={pendingHousekeepingCount}
+          maintenanceCount={openMaintenanceCount}
+          inventoryAlertCount={inventoryAlertCount}
+          staffAlertCount={staffAlertCount}
+          reviewsAlertCount={reviewsAlertCount}
+          whatsappCount={whatsappPendingCount}
+          isMobileOpen={isMobileSidebarOpen}
+          onCloseMobile={() => setIsMobileSidebarOpen(false)}
         />
 
-        {/* Dynamic Navigation Content */}
-        <div className="flex-1 overflow-y-auto overflow-x-hidden p-4 sm:p-6 lg:p-8">
-          {/* Global Firebase Configuration / Permission / Error Banners */}
-          {!firebaseConfigured && (
-            <div className="max-w-7xl mx-auto mb-5 bg-rose-50 border border-rose-200 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <div className="flex items-start gap-2.5">
-                <AlertCircle className="w-5 h-5 text-rose-700 shrink-0 mt-0.5" />
-                <div>
-                  <p className="text-xs font-bold text-rose-950">
-                    Firebase Configuration Missing or Incomplete (resortdesk-mykonos)
-                  </p>
-                  <p className="text-[11px] text-rose-800 mt-0.5">
-                    {configError ||
-                      'VITE_FIREBASE_API_KEY was not provided when building this bundle. Add all VITE_FIREBASE_* variables in your hosting build environment and redeploy.'}
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={openAuthModal}
-                className="px-4 py-2 bg-rose-700 hover:bg-rose-800 text-white text-xs font-bold rounded-xl shrink-0 cursor-pointer"
-              >
-                View Diagnostics
-              </button>
-            </div>
-          )}
+        {/* Main Content Pane */}
+        <div className="flex-1 flex flex-col h-full min-w-0 overflow-hidden">
+          <DashboardHeader
+            searchQuery={searchQuery}
+            setSearchQuery={setSearchQuery}
+            notificationsCount={unreadNotificationsCount}
+            alerts={operationalAlerts}
+            onAlertClick={(tab) => {
+              if (tab) navigateToModule(tab);
+            }}
+            onClearNotifications={handleClearNotifications}
+            onOpenSettings={
+              canAccessModule('settings') ? () => navigateToModule('settings') : undefined
+            }
+            onToggleMobileMenu={() => setIsMobileSidebarOpen(true)}
+            propertyName={settings.profile.propertyName || resortDetails.name}
+            propertyLocation={`${settings.profile.city || 'Tarkarli'}, Malvan`}
+            firestoreStatus={firestoreStatus}
+            staffLabel={
+              staffProfile?.fullName ||
+              user?.displayName ||
+              user?.email?.split('@')[0] ||
+              'Staff'
+            }
+            staffRole={role}
+            staffAvatarUrl={staffProfile?.profileImage || null}
+            onOpenAuthModal={openAuthModal}
+            onSignOut={() => {
+              void signOut().then(() => navigate('/login', { replace: true }));
+            }}
+          />
 
-          {firebaseConfigured && firestoreStatus === 'permission-denied' && (
-            <div className="max-w-7xl mx-auto mb-5 bg-amber-50 border border-amber-200 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <div className="flex items-start gap-2.5">
-                <ShieldAlert className="w-5 h-5 text-amber-700 shrink-0 mt-0.5" />
-                <div>
-                  <p className="text-xs font-bold text-amber-950">
-                    Staff Authentication Required for Cloud Firestore (`resortdesk-mykonos`)
-                  </p>
-                  <p className="text-[11px] text-amber-800 mt-0.5">
-                    {firestoreMessage ||
-                      'Firestore security rules require an authenticated staff session to read and write property records.'}
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={openAuthModal}
-                className="px-4 py-2 bg-teal-900 hover:bg-teal-950 text-white text-xs font-bold rounded-xl shrink-0 cursor-pointer"
-              >
-                Staff Sign In
-              </button>
-            </div>
-          )}
+          {/* Dynamic Navigation Content */}
+          <div className="flex-1 overflow-y-auto overflow-x-hidden p-4 sm:p-6 lg:p-8">
 
           {firestoreError && firestoreStatus === 'connected' && (
             <div className="max-w-7xl mx-auto mb-5 bg-rose-50 border border-rose-200 rounded-2xl p-4 flex items-center justify-between gap-3">
@@ -970,254 +1084,334 @@ export default function App() {
           )}
 
           {activeTab === 'dashboard' ? (
-            <div className="flex flex-col gap-6 max-w-7xl mx-auto">
-              {/* Morning Overview Banner Title */}
-              <div
-                id="dashboard-title-area"
-                className="flex flex-col sm:flex-row sm:items-end justify-between gap-2"
-              >
-                <div>
-                  <h2 className="text-2xl sm:text-3xl font-bold font-serif text-teal-950 tracking-tight leading-none">
-                    Morning Overview
-                  </h2>
-                  <p className="text-slate-500 text-xs sm:text-sm mt-2 font-medium">
-                    Daily front-desk &amp; property summary for{' '}
-                    <span className="font-bold text-teal-800">
-                      {settings.profile.propertyName || resortDetails.name}
-                    </span>
-                    , {settings.profile.city || 'Tarkarli'}, {settings.profile.state || 'Maharashtra'}.
-                  </p>
-                </div>
-                <span
-                  className={`self-start sm:self-auto text-[10px] font-semibold px-2.5 py-1 rounded-full border ${
-                    firestoreStatus === 'connected'
-                      ? 'text-emerald-700 bg-emerald-50 border-emerald-200'
-                      : 'text-amber-800 bg-amber-50 border-amber-200'
-                  }`}
+            <RoleGuard moduleId="dashboard">
+              <div className="flex flex-col gap-6 max-w-7xl mx-auto">
+                {/* Morning Overview Banner Title */}
+                <div
+                  id="dashboard-title-area"
+                  className="flex flex-col sm:flex-row sm:items-end justify-between gap-2"
                 >
-                  {dataLoading
-                    ? 'Connecting to Firestore...'
-                    : firestoreStatus === 'connected'
-                    ? `Live Firestore • ${bookings.length} Bookings`
-                    : 'Sign in required for Firestore'}
-                </span>
-              </div>
-
-              {/* 4 Clickable Stat Cards Row */}
-              <StatsGrid
-                stats={stats}
-                totalRooms={totalRooms}
-                checkedInArrivals={checkedInArrivalsCount}
-                clearedDepartures={clearedDeparturesCount}
-                earliestPendingArrival={earliestPendingArrival}
-                onNavigateTab={(tab) => navigateToModule(tab)}
-              />
-
-              {/* Compact Today's Operations Hub */}
-              <TodayOperationsSection
-                pendingHousekeepingCount={pendingHousekeepingCount}
-                urgentHousekeepingCount={urgentHousekeepingCount}
-                openMaintenanceCount={openMaintenanceCount}
-                highPriorityMaintenanceCount={highPriorityMaintenanceCount}
-                topMaintenanceLabel={topMaintenanceLabel}
-                pendingPaymentsAmount={stats.pendingPaymentsAmount}
-                pendingPaymentsGuestsCount={pendingDeparturesWithBalance.length}
-                unassignedRoomsCount={unassignedHousekeepingCount}
-                vacantRoomsCount={vacantRoomsCount}
-                unconfirmedBookingsCount={unconfirmedBookingsCount}
-                onNavigateModule={navigateToModule}
-                isLiveFirestore={firestoreStatus === 'connected'}
-              />
-
-              {/* Lower Section Grid Layout */}
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
-                <div className="lg:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-6 min-w-0">
-                  <ArrivalsCard
-                    arrivals={filteredArrivals}
-                    onAddArrival={(newArr) => {
-                      void handleAddArrival(newArr);
-                    }}
-                    onCheckIn={(id) => {
-                      void handleCheckInGuest(id);
-                    }}
-                    onViewBooking={(guestName) =>
-                      navigateToModule('bookings', { bookingsSearch: guestName })
-                    }
-                    onNavigateToBookings={() => navigateToModule('bookings')}
-                  />
-
-                  <DeparturesCard
-                    departures={filteredDepartures}
-                    onCheckOut={(id) => {
-                      void handleCheckOutGuest(id);
-                    }}
-                    onReviewBilling={(name, amt) => handleReviewBilling(name, amt)}
-                    onViewBooking={(guestName) =>
-                      navigateToModule('bookings', { bookingsSearch: guestName })
-                    }
-                    onNavigateToBookings={() => navigateToModule('bookings')}
-                  />
+                  <div>
+                    <h2 className="text-2xl sm:text-3xl font-bold font-serif text-teal-950 tracking-tight leading-none">
+                      Morning Overview
+                    </h2>
+                    <p className="text-slate-500 text-xs sm:text-sm mt-2 font-medium">
+                      Daily front-desk &amp; property summary for{' '}
+                      <span className="font-bold text-teal-800">
+                        {settings.profile.propertyName || resortDetails.name}
+                      </span>
+                      , {settings.profile.city || 'Tarkarli'}, {settings.profile.state || 'Maharashtra'}.
+                    </p>
+                  </div>
+                  <span
+                    className={`self-start sm:self-auto text-[10px] font-semibold px-2.5 py-1 rounded-full border ${
+                      firestoreStatus === 'connected'
+                        ? 'text-emerald-700 bg-emerald-50 border-emerald-200'
+                        : 'text-slate-600 bg-slate-50 border-slate-200'
+                    }`}
+                  >
+                    {dataLoading
+                      ? 'Syncing Firestore...'
+                      : `Live Firestore · ${bookings.length} Bookings`}
+                  </span>
                 </div>
 
-                <div className="flex flex-col gap-6 min-w-0">
-                  <OccupancyChart
-                    history={occupancyHistory}
-                    totalRooms={totalRooms}
-                    isLiveFirestore={firestoreStatus === 'connected'}
-                  />
+                {/* 4 Clickable Stat Cards Row */}
+                <StatsGrid
+                  stats={stats}
+                  totalRooms={totalRooms}
+                  checkedInArrivals={checkedInArrivalsCount}
+                  clearedDepartures={clearedDeparturesCount}
+                  earliestPendingArrival={earliestPendingArrival}
+                  onNavigateTab={(tab) => navigateToModule(tab)}
+                />
 
-                  <PendingPaymentsCard
-                    amount={stats.pendingPaymentsAmount}
-                    onReview={() => {
-                      const firstDue = pendingDeparturesWithBalance[0];
-                      if (firstDue && firstDue.amountDue) {
-                        handleReviewBilling(firstDue.guestName, firstDue.amountDue);
-                      } else {
-                        navigateToModule('billing', { billingFilter: 'Pending' });
+                {/* Compact Today's Operations Hub */}
+                <TodayOperationsSection
+                  pendingHousekeepingCount={pendingHousekeepingCount}
+                  urgentHousekeepingCount={urgentHousekeepingCount}
+                  openMaintenanceCount={openMaintenanceCount}
+                  highPriorityMaintenanceCount={highPriorityMaintenanceCount}
+                  topMaintenanceLabel={topMaintenanceLabel}
+                  pendingPaymentsAmount={stats.pendingPaymentsAmount}
+                  pendingPaymentsGuestsCount={pendingDeparturesWithBalance.length}
+                  unassignedRoomsCount={unassignedHousekeepingCount}
+                  vacantRoomsCount={vacantRoomsCount}
+                  unconfirmedBookingsCount={unconfirmedBookingsCount}
+                  onNavigateModule={navigateToModule}
+                  isLiveFirestore={firestoreStatus === 'connected'}
+                />
+
+                {/* Lower Section Grid Layout */}
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
+                  <div className="lg:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-6 min-w-0">
+                    <ArrivalsCard
+                      arrivals={filteredArrivals}
+                      onAddArrival={(newArr) => {
+                        void handleAddArrival(newArr);
+                      }}
+                      onCheckIn={(id) => {
+                        void handleCheckInGuest(id);
+                      }}
+                      onViewBooking={(guestName) =>
+                        navigateToModule('bookings', { bookingsSearch: guestName })
                       }
-                    }}
-                  />
+                      onNavigateToBookings={() => navigateToModule('bookings')}
+                    />
 
-                  <AIDeskCard
-                    arrivals={arrivals}
-                    departures={departures}
-                    housekeeping={housekeeping}
-                    maintenance={canonicalMaintenanceAlerts}
-                    bookings={bookings}
-                    onTakeAction={() => setShowAiActionModal(true)}
-                    onNewBookingClick={() => setShowBookingModal(true)}
-                    onNavigateModule={navigateToModule}
-                    onReviewBilling={(name, amt) => handleReviewBilling(name, amt)}
-                  />
+                    <DeparturesCard
+                      departures={filteredDepartures}
+                      onCheckOut={(id) => {
+                        void handleCheckOutGuest(id);
+                      }}
+                      onReviewBilling={(name, amt) => handleReviewBilling(name, amt)}
+                      onViewBooking={(guestName) =>
+                        navigateToModule('bookings', { bookingsSearch: guestName })
+                      }
+                      onNavigateToBookings={() => navigateToModule('bookings')}
+                    />
+                  </div>
+
+                  <div className="flex flex-col gap-6 min-w-0">
+                    <OccupancyChart
+                      history={occupancyHistory}
+                      totalRooms={totalRooms}
+                      isLiveFirestore={firestoreStatus === 'connected'}
+                    />
+
+                    <PendingPaymentsCard
+                      amount={stats.pendingPaymentsAmount}
+                      onReview={() => {
+                        const firstDue = pendingDeparturesWithBalance[0];
+                        if (firstDue && firstDue.amountDue) {
+                          handleReviewBilling(firstDue.guestName, firstDue.amountDue);
+                        } else {
+                          navigateToModule('billing', { billingFilter: 'Pending' });
+                        }
+                      }}
+                    />
+
+                    <AIDeskCard
+                      arrivals={arrivals}
+                      departures={departures}
+                      housekeeping={housekeeping}
+                      maintenance={canonicalMaintenanceAlerts}
+                      bookings={bookings}
+                      onTakeAction={() => setShowAiActionModal(true)}
+                      onNewBookingClick={() => {
+                        if (!hasPermission('manage_bookings')) {
+                          triggerToast('Your staff role does not allow creating bookings.');
+                          return;
+                        }
+                        setShowBookingModal(true);
+                      }}
+                      onNavigateModule={navigateToModule}
+                      onReviewBilling={(name, amt) => handleReviewBilling(name, amt)}
+                    />
+                  </div>
                 </div>
-              </div>
 
-              <PulseCard
-                propertyName={settings.profile.propertyName || resortDetails.name}
-                location={`${settings.profile.city || 'Tarkarli'}, Malvan`}
-                address={settings.profile.registeredAddress || resortDetails.address}
-                checkInTime={settings.profile.checkInTime || resortDetails.checkInTime}
-                checkOutTime={settings.profile.checkOutTime || resortDetails.checkOutTime}
-              />
-            </div>
+                <PulseCard
+                  propertyName={settings.profile.propertyName || resortDetails.name}
+                  location={`${settings.profile.city || 'Tarkarli'}, Malvan`}
+                  address={settings.profile.registeredAddress || resortDetails.address}
+                  checkInTime={settings.profile.checkInTime || resortDetails.checkInTime}
+                  checkOutTime={settings.profile.checkOutTime || resortDetails.checkOutTime}
+                />
+              </div>
+            </RoleGuard>
           ) : activeTab === 'rooms' ? (
-            <RoomsView
-              categories={syncedCategories}
-              rooms={rooms}
-              amenities={propertyAmenities}
-              maintenanceTickets={maintenanceTickets}
-              blockedDays={blockedDays}
-              onUpdateCategory={async (updated) => {
-                await upsertCollectionDoc('roomCategories', updated);
-                triggerToast(`Pricing rates updated in Firestore for ${updated.name}`);
-              }}
-              onAddCategory={async (newC) => {
-                await upsertCollectionDoc('roomCategories', newC);
-                triggerToast(`New category ${newC.name} saved to Firestore!`);
-              }}
-              onUpdateAmenity={async (updated) => {
-                await upsertCollectionDoc('propertyAmenities', updated);
-                triggerToast(`${updated.name} amenity status set to ${updated.status}`);
-              }}
-              onAddAmenity={async (newA) => {
-                await upsertCollectionDoc('propertyAmenities', newA);
-                triggerToast(`Property amenity ${newA.name} added to Firestore!`);
-              }}
-              onUpdateRoomStatus={async (roomId, status, note) => {
-                await updateRoomStatusInFirestore(roomId, status, note);
-                triggerToast(`Room status updated to ${status}`);
-              }}
-              onSaveBlockedDays={async (nextDays) => {
-                await saveBlockedDays(nextDays);
-                triggerToast(`Inventory calendar updated (${nextDays.length} blocked dates saved).`);
-              }}
-              onOpenMaintenanceModule={() => navigateToModule('maintenance')}
-              triggerToast={triggerToast}
-            />
+            <RoleGuard moduleId="rooms">
+              <RoomsView
+                categories={syncedCategories}
+                rooms={rooms}
+                amenities={propertyAmenities}
+                maintenanceTickets={maintenanceTickets}
+                blockedDays={blockedDays}
+                onUpdateCategory={async (updated) => {
+                  if (!hasPermission('manage_rooms')) {
+                    triggerToast('Your role does not allow editing room rates.');
+                    return;
+                  }
+                  await upsertCollectionDoc('roomCategories', updated);
+                  triggerToast(`Pricing rates updated in Firestore for ${updated.name}`);
+                }}
+                onAddCategory={async (newC) => {
+                  if (!hasPermission('manage_rooms')) {
+                    triggerToast('Your role does not allow adding room categories.');
+                    return;
+                  }
+                  await upsertCollectionDoc('roomCategories', newC);
+                  triggerToast(`New category ${newC.name} saved to Firestore!`);
+                }}
+                onUpdateAmenity={async (updated) => {
+                  if (!hasPermission('manage_rooms')) {
+                    triggerToast('Your role does not allow updating amenities.');
+                    return;
+                  }
+                  await upsertCollectionDoc('propertyAmenities', updated);
+                  triggerToast(`${updated.name} amenity status set to ${updated.status}`);
+                }}
+                onAddAmenity={async (newA) => {
+                  if (!hasPermission('manage_rooms')) {
+                    triggerToast('Your role does not allow adding amenities.');
+                    return;
+                  }
+                  await upsertCollectionDoc('propertyAmenities', newA);
+                  triggerToast(`Property amenity ${newA.name} added to Firestore!`);
+                }}
+                onUpdateRoomStatus={async (roomId, status, note) => {
+                  if (!hasPermission(['manage_rooms', 'update_room_status'])) {
+                    triggerToast('Your role does not allow changing room status.');
+                    return;
+                  }
+                  await updateRoomStatusInFirestore(roomId, status, note);
+                  triggerToast(`Room status updated to ${status}`);
+                }}
+                onSaveBlockedDays={async (nextDays) => {
+                  if (!hasPermission('manage_rooms')) {
+                    triggerToast('Your role does not allow editing blocked dates.');
+                    return;
+                  }
+                  await saveBlockedDays(nextDays);
+                  triggerToast(`Inventory calendar updated (${nextDays.length} blocked dates saved).`);
+                }}
+                onOpenMaintenanceModule={() => navigateToModule('maintenance')}
+                triggerToast={triggerToast}
+              />
+            </RoleGuard>
           ) : activeTab === 'inventory' ? (
-            <InventoryView triggerToast={triggerToast} />
+            <RoleGuard moduleId="inventory">
+              <InventoryView triggerToast={triggerToast} />
+            </RoleGuard>
           ) : activeTab === 'staff' ? (
-            <StaffManagementView triggerToast={triggerToast} />
+            <RoleGuard moduleId="staff">
+              <StaffManagementView triggerToast={triggerToast} />
+            </RoleGuard>
           ) : activeTab === 'whatsapp' ? (
-            <WhatsAppAutomationView triggerToast={triggerToast} />
+            <RoleGuard moduleId="whatsapp">
+              <WhatsAppAutomationView triggerToast={triggerToast} />
+            </RoleGuard>
           ) : activeTab === 'reviews' ? (
-            <ReviewsManagementView
-              onNavigateToMaintenance={() => navigateToModule('maintenance')}
-              onNavigateToStaff={() => navigateToModule('staff')}
-              triggerToast={triggerToast}
-            />
+            <RoleGuard moduleId="reviews">
+              <ReviewsManagementView
+                onNavigateToMaintenance={() => navigateToModule('maintenance')}
+                onNavigateToStaff={() => navigateToModule('staff')}
+                triggerToast={triggerToast}
+              />
+            </RoleGuard>
           ) : activeTab === 'guests' ? (
-            <GuestsCRMView
-              guests={guestsCRM}
-              bookings={bookings}
-              invoices={invoices}
-              onUpdateGuest={async (updated) => {
-                await upsertCollectionDoc('guests', updated);
-                triggerToast(`CRM profile updated in Firestore for ${updated.name}`);
-              }}
-              onAddGuest={async (newGuest) => {
-                const saved = await createOrMergeGuestCRM(newGuest);
-                triggerToast(`Guest profile saved to Firestore for ${saved.name}`);
-              }}
-              triggerToast={triggerToast}
-            />
+            <RoleGuard moduleId="guests">
+              <GuestsCRMView
+                guests={guestsCRM}
+                bookings={bookings}
+                invoices={invoices}
+                onUpdateGuest={async (updated) => {
+                  if (!hasPermission('manage_guests')) {
+                    triggerToast('Your role does not allow editing guest profiles.');
+                    return;
+                  }
+                  await upsertCollectionDoc('guests', updated);
+                  triggerToast(`CRM profile updated in Firestore for ${updated.name}`);
+                }}
+                onAddGuest={async (newGuest) => {
+                  if (!hasPermission('manage_guests')) {
+                    triggerToast('Your role does not allow adding guest profiles.');
+                    return;
+                  }
+                  const saved = await createOrMergeGuestCRM(newGuest);
+                  triggerToast(`Guest profile saved to Firestore for ${saved.name}`);
+                }}
+                triggerToast={triggerToast}
+              />
+            </RoleGuard>
           ) : activeTab === 'billing' ? (
-            <BillingView
-              invoices={invoices}
-              bookings={bookings}
-              rooms={rooms}
-              settings={settings}
-              triggerToast={triggerToast}
-              initialStatusFilter={billingNavFilter}
-              navigationKey={navFilterKey}
-            />
+            <RoleGuard moduleId="billing">
+              <BillingView
+                invoices={invoices}
+                bookings={bookings}
+                rooms={rooms}
+                settings={settings}
+                triggerToast={triggerToast}
+                initialStatusFilter={billingNavFilter}
+                navigationKey={navFilterKey}
+              />
+            </RoleGuard>
           ) : activeTab === 'settings' ? (
-            <SettingsView
-              settings={settings}
-              onSaveSettings={async (nextSettings) => {
-                await saveResortSettings(nextSettings);
-                setSettings(nextSettings);
-              }}
-              onNavigateToBilling={() => navigateToModule('billing')}
-              triggerToast={triggerToast}
-            />
+            <RoleGuard moduleId="settings">
+              <SettingsView
+                settings={settings}
+                onSaveSettings={async (nextSettings) => {
+                  if (!hasPermission('manage_settings')) {
+                    triggerToast('Only an Administrator can save system settings.');
+                    return;
+                  }
+                  await saveResortSettings(nextSettings);
+                  setSettings(nextSettings);
+                }}
+                onNavigateToBilling={() => navigateToModule('billing')}
+                triggerToast={triggerToast}
+              />
+            </RoleGuard>
           ) : activeTab === 'bookings' ? (
-            <BookingsView
-              bookings={bookings}
-              rooms={rooms}
-              guests={guestsCRM}
-              loading={dataLoading}
-              errorMsg={firestoreError}
-              onSeedStarterData={handleSeedStarterDataset}
-              onNavigateTab={(tab) => navigateToModule(tab)}
-              onOpenMobileDrawer={() => setIsMobileSidebarOpen(true)}
-              triggerToast={triggerToast}
-              initialStatusFilter={bookingsNavFilter.status}
-              initialSearchQuery={bookingsNavFilter.search}
-              navigationKey={navFilterKey}
-            />
+            <RoleGuard moduleId="bookings">
+              <BookingsView
+                bookings={bookings}
+                rooms={rooms}
+                guests={guestsCRM}
+                loading={dataLoading}
+                errorMsg={firestoreError}
+                onSeedStarterData={handleSeedStarterDataset}
+                onNavigateTab={(tab) => navigateToModule(tab)}
+                onOpenMobileDrawer={() => setIsMobileSidebarOpen(true)}
+                triggerToast={triggerToast}
+                initialStatusFilter={bookingsNavFilter.status}
+                initialSearchQuery={bookingsNavFilter.search}
+                navigationKey={navFilterKey}
+              />
+            </RoleGuard>
           ) : activeTab === 'housekeeping' ? (
-            <HousekeepingView
-              tasks={housekeeping}
-              rooms={rooms}
-              staffMembers={staffMembers}
-              openMaintenanceCount={openMaintenanceCount}
-              onSaveTask={async (updatedTask) => {
-                await saveHousekeepingTaskAndSyncRoom(updatedTask, rooms);
-              }}
-              onNavigateMaintenance={() => navigateToModule('maintenance')}
-              triggerToast={triggerToast}
-              initialFilter={housekeepingNavFilter}
-              navigationKey={navFilterKey}
-            />
-          ) : activeTab === 'maintenance' || activeTab === 'reports' ? (
-            <MaintenanceView
-              tickets={maintenanceTickets}
-              rooms={rooms}
-              initialFilter={maintenanceNavFilter}
-              navigationKey={navFilterKey}
-              triggerToast={triggerToast}
-            />
+            <RoleGuard moduleId="housekeeping">
+              <HousekeepingView
+                tasks={housekeeping}
+                rooms={rooms}
+                staffMembers={staffMembers}
+                openMaintenanceCount={openMaintenanceCount}
+                onSaveTask={async (updatedTask) => {
+                  await saveHousekeepingTaskAndSyncRoom(updatedTask, rooms);
+                }}
+                onNavigateMaintenance={() => navigateToModule('maintenance')}
+                triggerToast={triggerToast}
+                initialFilter={housekeepingNavFilter}
+                navigationKey={navFilterKey}
+              />
+            </RoleGuard>
+          ) : activeTab === 'maintenance' ? (
+            <RoleGuard moduleId="maintenance">
+              <MaintenanceView
+                tickets={maintenanceTickets}
+                rooms={rooms}
+                initialFilter={maintenanceNavFilter}
+                navigationKey={navFilterKey}
+                triggerToast={triggerToast}
+              />
+            </RoleGuard>
+          ) : activeTab === 'reports' ? (
+            <RoleGuard moduleId="reports">
+              <AnalyticsReportsView
+                bookings={bookings}
+                invoices={invoices}
+                rooms={rooms}
+                inventoryItems={inventoryItems}
+                housekeeping={housekeeping}
+                maintenanceTickets={maintenanceTickets}
+                occupancyHistory={occupancyHistory}
+                occupancyRate={occupancyRate}
+                totalRevenue={totalCollectedRevenue}
+                pendingPayments={totalPendingPayments}
+                triggerToast={triggerToast}
+              />
+            </RoleGuard>
           ) : (
             <div className="max-w-3xl mx-auto bg-white border border-slate-200 p-8 rounded-3xl shadow-sm text-center py-20 flex flex-col items-center gap-4">
               <div className="p-4 bg-teal-50 text-teal-800 rounded-full">
@@ -1226,7 +1420,7 @@ export default function App() {
               <h3 className="text-xl font-bold text-slate-800 capitalize">{activeTab} Module</h3>
               <button
                 type="button"
-                onClick={() => setActiveTab('dashboard')}
+                onClick={() => navigateToModule(defaultModule)}
                 className="mt-4 px-4 py-2 bg-teal-800 text-white rounded-xl text-xs font-semibold hover:bg-teal-900 transition-colors cursor-pointer"
               >
                 Return to Dashboard
@@ -1411,5 +1605,6 @@ export default function App() {
         </div>
       )}
     </div>
+    </ProtectedRoute>
   );
 }

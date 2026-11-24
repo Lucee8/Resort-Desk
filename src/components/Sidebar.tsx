@@ -7,7 +7,6 @@ import {
   Receipt,
   LifeBuoy,
   LogOut,
-  LogIn,
   Sliders,
   Wrench,
   BarChart3,
@@ -20,6 +19,8 @@ import {
   MapPin,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { useRouter } from '../context/RouterContext';
+import { AppModuleId } from '../types';
 
 interface SidebarProps {
   activeTab: string;
@@ -48,9 +49,15 @@ export default function Sidebar({
   isMobileOpen = false,
   onCloseMobile,
 }: SidebarProps) {
-  const { user, signOut, openAuthModal } = useAuth();
+  const { user, staffProfile, role, canAccessModule, signOut } = useAuth();
+  const { navigate } = useRouter();
 
-  const menuItems = [
+  const allMenuItems: Array<{
+    id: AppModuleId;
+    name: string;
+    icon: React.ComponentType<{ className?: string }>;
+    badge?: number;
+  }> = [
     { id: 'dashboard', name: 'Home', icon: LayoutDashboard },
     { id: 'bookings', name: 'Bookings', icon: CalendarRange },
     {
@@ -96,11 +103,24 @@ export default function Sidebar({
     { id: 'settings', name: 'Settings', icon: Settings },
   ];
 
+  const menuItems = allMenuItems.filter((item) => canAccessModule(item.id));
+  const displayName =
+    staffProfile?.fullName ||
+    user?.displayName ||
+    user?.email?.split('@')[0] ||
+    'Staff Member';
+
   const handleSelectTab = (id: string) => {
     setActiveTab(id);
     if (onCloseMobile) {
       onCloseMobile();
     }
+  };
+
+  const handleLogout = async () => {
+    if (onCloseMobile) onCloseMobile();
+    await signOut();
+    navigate('/login', { replace: true });
   };
 
   const sidebarContent = (
@@ -135,7 +155,7 @@ export default function Sidebar({
           )}
         </div>
 
-        {/* Navigation Menu */}
+        {/* Navigation Menu (RBAC filtered) */}
         <nav className="flex flex-col gap-1">
           {menuItems.map((item) => {
             const Icon = item.icon;
@@ -168,8 +188,8 @@ export default function Sidebar({
                       isActive
                         ? 'bg-white/20 text-white'
                         : item.id === 'maintenance'
-                        ? 'bg-orange-50 text-[#a64b2a] border border-orange-200'
-                        : 'bg-rose-50 text-rose-600 border border-rose-100'
+                          ? 'bg-orange-50 text-[#a64b2a] border border-orange-200'
+                          : 'bg-rose-50 text-rose-600 border border-rose-100'
                     }`}
                   >
                     {item.badge}
@@ -181,46 +201,36 @@ export default function Sidebar({
         </nav>
       </div>
 
-      {/* Footer Navigation */}
-      <div className="flex flex-col gap-1 border-t border-slate-200/60 pt-4 mt-4">
-        <button
-          id="sidebar-support-btn"
-          type="button"
-          onClick={() => handleSelectTab('settings')}
-          className="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-semibold text-slate-500 hover:bg-slate-150 hover:text-slate-800 transition-all duration-150 cursor-pointer"
-        >
-          <LifeBuoy className="w-4 h-4 text-slate-400" />
-          <span>Support &amp; Settings</span>
-        </button>
-
-        {user ? (
+      {/* Footer Navigation & Authenticated Staff Card */}
+      <div className="flex flex-col gap-2 border-t border-slate-200/60 pt-4 mt-4">
+        {canAccessModule('settings') && (
           <button
-            id="sidebar-signout-btn"
+            id="sidebar-support-btn"
             type="button"
-            onClick={() => {
-              void signOut();
-            }}
-            className="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-semibold text-slate-500 hover:bg-rose-50 hover:text-rose-600 transition-all duration-150 cursor-pointer"
+            onClick={() => handleSelectTab('settings')}
+            className="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-semibold text-slate-500 hover:bg-slate-150 hover:text-slate-800 transition-all duration-150 cursor-pointer"
           >
-            <LogOut className="w-4 h-4 text-slate-400 shrink-0" />
-            <span className="truncate">
-              Sign Out ({user.displayName || user.email?.split('@')[0] || 'Staff'})
-            </span>
-          </button>
-        ) : (
-          <button
-            id="sidebar-signin-btn"
-            type="button"
-            onClick={() => {
-              if (onCloseMobile) onCloseMobile();
-              openAuthModal();
-            }}
-            className="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-semibold text-teal-800 bg-teal-50 hover:bg-teal-100 transition-all duration-150 cursor-pointer"
-          >
-            <LogIn className="w-4 h-4 text-teal-700 shrink-0" />
-            <span>Staff Sign In</span>
+            <LifeBuoy className="w-4 h-4 text-slate-400" />
+            <span>Support &amp; Settings</span>
           </button>
         )}
+
+        <div className="px-3 py-2.5 rounded-xl bg-white border border-slate-200/80">
+          <p className="text-xs font-bold text-slate-900 truncate">{displayName}</p>
+          <p className="text-[10px] font-semibold text-[#004B38] truncate mt-0.5">
+            {role || 'Staff'}
+          </p>
+        </div>
+
+        <button
+          id="sidebar-signout-btn"
+          type="button"
+          onClick={() => void handleLogout()}
+          className="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-rose-50 hover:text-rose-700 transition-all duration-150 cursor-pointer"
+        >
+          <LogOut className="w-4 h-4 text-slate-400 shrink-0" />
+          <span className="truncate">Sign Out</span>
+        </button>
       </div>
     </div>
   );

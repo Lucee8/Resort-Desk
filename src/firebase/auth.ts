@@ -1,11 +1,14 @@
 import {
   getAuth,
   signInWithEmailAndPassword,
-  createUserWithEmailAndPassword,
   signOut as firebaseSignOut,
   sendPasswordResetEmail,
   updateProfile,
   onAuthStateChanged,
+  onIdTokenChanged,
+  setPersistence,
+  browserLocalPersistence,
+  browserSessionPersistence,
   User,
   Auth,
   UserCredential,
@@ -45,32 +48,52 @@ function assertAuthReady(): Auth {
 }
 
 /**
- * Sign in an existing user with email and password
+ * Maps Firebase Auth error codes to user-friendly hospitality staff messages
+ */
+export function mapFirebaseAuthError(error: unknown): string {
+  const code =
+    typeof error === 'object' && error !== null && 'code' in error
+      ? String((error as { code?: unknown }).code || '')
+      : '';
+  const message = error instanceof Error ? error.message : String(error || '');
+
+  switch (code) {
+    case 'auth/invalid-credential':
+    case 'auth/wrong-password':
+    case 'auth/user-not-found':
+      return 'Incorrect email or password. Please verify your staff credentials and try again.';
+    case 'auth/invalid-email':
+      return 'Please enter a valid staff email address.';
+    case 'auth/user-disabled':
+      return 'Your staff account has been deactivated. Contact the Resort Administrator.';
+    case 'auth/too-many-requests':
+      return 'Too many failed sign-in attempts. Please wait a few minutes or reset your password.';
+    case 'auth/network-request-failed':
+      return 'Network connection unavailable. Check your internet access and try again.';
+    case 'auth/missing-password':
+      return 'Please enter your password.';
+    default:
+      if (message.includes('auth/invalid-credential')) {
+        return 'Incorrect email or password. Please verify your staff credentials and try again.';
+      }
+      return message || 'Authentication failed. Please try again.';
+  }
+}
+
+/**
+ * Sign in an existing staff user with email, password, and persistence preference
  */
 export const signInWithEmail = async (
   email: string,
-  pass: string
-): Promise<UserCredential> => {
-  return signInWithEmailAndPassword(assertAuthReady(), email.trim(), pass);
-};
-
-/**
- * Create a new user with email and password
- */
-export const signUpWithEmail = async (
-  email: string,
   pass: string,
-  displayName?: string
+  rememberMe = true
 ): Promise<UserCredential> => {
-  const credential = await createUserWithEmailAndPassword(
-    assertAuthReady(),
-    email.trim(),
-    pass
+  const readyAuth = assertAuthReady();
+  await setPersistence(
+    readyAuth,
+    rememberMe ? browserLocalPersistence : browserSessionPersistence
   );
-  if (displayName && credential.user) {
-    await updateProfile(credential.user, { displayName });
-  }
-  return credential;
+  return signInWithEmailAndPassword(readyAuth, email.trim(), pass);
 };
 
 /**
@@ -81,7 +104,7 @@ export const logOut = async (): Promise<void> => {
 };
 
 /**
- * Send a password reset email
+ * Send a password reset email via Firebase Auth
  */
 export const resetUserPassword = async (email: string): Promise<void> => {
   return sendPasswordResetEmail(assertAuthReady(), email.trim());
@@ -103,11 +126,11 @@ export const subscribeToAuthChanges = (
 // Re-export modular Firebase Auth methods and types for direct usage
 export {
   signInWithEmailAndPassword,
-  createUserWithEmailAndPassword,
   firebaseSignOut as signOut,
   sendPasswordResetEmail,
   updateProfile,
   onAuthStateChanged,
+  onIdTokenChanged,
 };
 export type { User, UserCredential, Auth };
 
