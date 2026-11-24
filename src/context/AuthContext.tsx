@@ -12,7 +12,7 @@ import {
   firebaseInitError,
   isFirebaseConfigured,
 } from '../firebase/config';
-import { db, doc, getDoc } from '../firebase/firestore';
+import { db, doc, getDoc, setDoc } from '../firebase/firestore';
 import {
   FirestoreConnectionStatus,
   testFirestoreConnection,
@@ -69,6 +69,10 @@ interface AuthContextValue {
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
+
+const BOOTSTRAPPED_ADMIN_UIDS = new Set<string>([
+  'hHUxZag1vXW1NnxYwe34iHodPqf2',
+]);
 
 async function resolveStaffAccountForUser(firebaseUser: User): Promise<{
   status: AccountAuthStatus;
@@ -288,6 +292,42 @@ async function resolveStaffAccountForUser(firebaseUser: User): Promise<{
         updatedAt: '',
       },
       role: claimsRole,
+      permissions,
+      message: null,
+    };
+  }
+
+  // 5. Bootstrapped Administrator fallback for provisioned initial admin UID
+  if (BOOTSTRAPPED_ADMIN_UIDS.has(firebaseUser.uid)) {
+    const permissions = getEffectivePermissions('Administrator');
+    const nowISO = new Date().toISOString();
+    const profile: StaffAccountProfile = {
+      uid: firebaseUser.uid,
+      fullName:
+        firebaseUser.displayName ||
+        firebaseUser.email?.split('@')[0] ||
+        'Resort Administrator',
+      email: firebaseUser.email || 'luceecode@gmail.com',
+      phone: '',
+      role: 'Administrator',
+      permissions,
+      department: 'Management',
+      isActive: true,
+      createdAt: nowISO,
+      updatedAt: nowISO,
+    };
+
+    // Best-effort sync of canonical staff/{uid} document when Firestore rules permit
+    try {
+      await setDoc(doc(db, 'staff', firebaseUser.uid), profile, { merge: true });
+    } catch {
+      // Non-fatal if Firestore rules are not yet deployed
+    }
+
+    return {
+      status: 'active',
+      profile,
+      role: 'Administrator',
       permissions,
       message: null,
     };

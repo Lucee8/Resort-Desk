@@ -42,6 +42,10 @@ const ADMINISTRATOR_ROLES = new Set([
   'super admin',
 ]);
 
+const BOOTSTRAPPED_ADMIN_UIDS = new Set([
+  'hHUxZag1vXW1NnxYwe34iHodPqf2',
+]);
+
 /**
  * Verifies that the caller is an authenticated Firebase user with an active
  * Mykonos Cottage staff or admin profile.
@@ -79,7 +83,11 @@ export async function assertAuthorizedStaff(
     );
   }
 
-  // 2. Check legacy dedicated admins collection
+  // 2. Check legacy dedicated admins collection or bootstrapped initial admin UID
+  if (BOOTSTRAPPED_ADMIN_UIDS.has(uid)) {
+    return { uid, email, role: 'administrator' };
+  }
+
   const adminDoc = await db.collection('admins').doc(uid).get();
   if (adminDoc.exists) {
     return { uid, email, role: 'administrator' };
@@ -150,6 +158,10 @@ export async function assertAdministrator(
       'permission-denied',
       'Only an active Administrator can manage staff login accounts and permissions.'
     );
+  }
+
+  if (BOOTSTRAPPED_ADMIN_UIDS.has(uid)) {
+    return { uid, email };
   }
 
   const adminDoc = await db.collection('admins').doc(uid).get();

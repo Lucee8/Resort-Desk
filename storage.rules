@@ -33,7 +33,10 @@ service firebase.storage {
 
     function isLegacyAdmin() {
       return isSignedIn()
-        && firestore.exists(/databases/(default)/documents/admins/$(request.auth.uid))
+        && (
+          request.auth.uid == 'hHUxZag1vXW1NnxYwe34iHodPqf2' ||
+          firestore.exists(/databases/(default)/documents/admins/$(request.auth.uid))
+        )
         && (!hasStaffDoc() || (staffData().isActive != false && staffData().disabled != true));
     }
 
